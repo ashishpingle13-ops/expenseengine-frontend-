@@ -1165,193 +1165,6 @@ const MonthlyReport = () => {
 export default MonthlyReport
 </file>
 
-<file path="src/pages/PickContact.jsx">
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Search, Plus, User } from 'lucide-react';
-import toast from 'react-hot-toast';
-import { Contacts } from '@capacitor-community/contacts';
-import { Capacitor } from '@capacitor/core';
-
-export default function PickContact() {
-    const navigate = useNavigate();
-    const location = useLocation();
-    const slideClass = location.state?.slideDirection === 'left' ? 'animate-slide-in-left' : 'animate-slide-in-right';
-
-    const [searchQuery, setSearchQuery] = useState('');
-    const [deviceContacts, setDeviceContacts] = useState(() => {
-    const saved = localStorage.getItem('cachedDeviceContacts');
-    return saved ? JSON.parse(saved) : [];
-    });
-    const [isLoading, setIsLoading] = useState(false);
-
-    
-
-    // Automatically load all contacts when opening the page on Android APK!
-    useEffect(() => {
-        if (Capacitor.isNativePlatform()) {
-            loadAllNativeContacts();
-        }
-    }, []);
-
-    // 1. NATIVE ANDROID APK: Grabs EVERY contact in the phone automatically!
-    const loadAllNativeContacts = async () => {
-        try {
-            setIsLoading(true);
-            const permission = await Contacts.requestPermissions();
-            if (permission.contacts !== 'granted') {
-                toast.error("Please allow contact permission to see your contacts");
-                return;
-            }
-
-            const result = await Contacts.getContacts({
-                projection: { name: true, phones: true }
-            });
-
-            const allContacts = [];
-            result.contacts.forEach((c, idx) => {
-                const displayName = c.name?.display || '';
-                const rawPhone = c.phones?.[0]?.number || '';
-                const cleanPhone = rawPhone.replace(/\D/g, '').slice(-10);
-
-                if (cleanPhone.length === 10) {
-                    allContacts.push({
-                        id: c.contactId || idx,
-                        name: displayName || `+91 ${cleanPhone}`,
-                        phone: cleanPhone
-                    });
-                }
-            });
-
-            // Sort alphabetically just like Khatabook
-            allContacts.sort((a, b) => a.name.localeCompare(b.name));
-            setDeviceContacts(allContacts);
-        } catch (error) {
-            console.error("Error loading native contacts:", error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // 2. WEB BROWSER FALLBACK (When testing in Chrome before building APK)
-    const loadContacts = async () => {
-        if (Capacitor.isNativePlatform()) {
-            return loadAllNativeContacts();
-        }
-
-        if ('contacts' in navigator && 'select' in navigator.contacts) {
-            try {
-                setIsLoading(true);
-                const contacts = await navigator.contacts.select(['name', 'tel'], { multiple: true });
-                const formatted = contacts.map((c, idx) => ({
-                    id: idx,
-                    name: c.name?.[0] || 'Unknown',
-                    phone: (c.tel?.[0] || '').replace(/\D/g, '').slice(-10)
-                })).filter(c => c.phone.length === 10);
-                setDeviceContacts(formatted);
-            } catch (error) {
-                console.log("Contact picker closed or denied:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        } else {
-            toast("Full automatic contact list works inside the Android APK!");
-        }
-    };
-
-    // Filter contacts based on search query
-    const filteredContacts = deviceContacts.filter(c => 
-        c.name.toLowerCase().includes(searchQuery.toLowerCase()) || c.phone.includes(searchQuery)
-    );
-
-    const handleSelectContact = (name, phone) => {
-        navigate('/add-worker', {
-            state: { initialName: name, initialPhone: phone, slideDirection: 'fade' }
-        });
-    };
-
-    return (
-        <div className="fixed inset-0 flex flex-col bg-gray-50 max-w-md mx-auto font-sans overflow-hidden animate-slide-up-bottom z-50">
-            
-            {/* Top Blue Header with Search Bar */}
-            <header className="bg-[#1048A4] text-white px-4 pt-4 pb-3 flex flex-col gap-3 shrink-0 shadow-md">
-                <div className="flex items-center gap-3">
-                    <button onClick={() => navigate(-1)} className="p-1 rounded-full active:scale-95 transition">
-                        <ArrowLeft className="w-6 h-6" />
-                    </button>
-                    <div className="flex-1 bg-white rounded-lg px-3 py-2 flex items-center gap-2">
-                        <input 
-                            type="text"
-                            placeholder="Customer name"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full text-sm font-semibold text-gray-900 outline-none bg-transparent placeholder:text-gray-400"
-                            autoFocus
-                        />
-                        <Search className="w-4 h-4 text-gray-400 shrink-0" />
-                    </div>
-                </div>
-            </header>
-
-            {/* Contact List Area */}
-            <div className="flex-1 overflow-y-auto bg-white divide-y divide-gray-100">
-                
-                {/* Add Worker / Customer Row at Top (matches image_cbd30a.png)[cite: 35] */}
-                <div 
-                    onClick={() => navigate('/add-worker', { state: { slideDirection: 'fade' } })}
-                    className="flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 cursor-pointer transition"
-                >
-                    <div className="flex items-center gap-3.5">
-                        <div className="w-11 h-11 rounded-full border-2 border-dashed border-[#1048A4] flex items-center justify-center text-[#1048A4] bg-blue-50/50">
-                            <Plus className="w-5 h-5 stroke-[2.5]" />
-                        </div>
-                        <span className="text-[15px] font-bold text-[#1048A4]">Add Worker</span>
-                    </div>
-                    <span className="text-gray-400 text-lg font-bold">&gt;</span>
-                </div>
-
-                {/* Native Device Contacts or Fallback List */}
-                {isLoading ? (
-                    <p className="text-center text-gray-400 py-10 text-sm">Loading device contacts...</p>
-                ) : filteredContacts.length > 0 ? (
-                    filteredContacts.map((c) => (
-                        <div 
-                            key={c.id}
-                            onClick={() => handleSelectContact(c.name, c.phone)}
-                            className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 cursor-pointer transition"
-                        >
-                            <div className="flex items-center gap-3.5">
-                                <div className="w-11 h-11 rounded-full bg-[#1048A4] text-white flex items-center justify-center font-bold text-sm shadow-sm">
-                                    {c.name.charAt(0).toUpperCase()}
-                                </div>
-                                <div>
-                                    <p className="text-[14px] font-bold text-gray-900 leading-tight">{c.name}</p>
-                                    <p className="text-[12px] text-gray-400 font-medium mt-0.5">+91 {c.phone}</p>
-                                </div>
-                            </div>
-                            <div className="w-7 h-7 rounded-full bg-blue-50 text-[#1048A4] flex items-center justify-center font-bold text-xs">
-                                +
-                            </div>
-                        </div>
-                    ))
-                ) : (
-                    <div className="text-center py-12 px-4">
-                        <p className="text-gray-500 text-sm font-semibold mb-2">No device contacts loaded or found.</p>
-                        <button 
-                            onClick={loadContacts}
-                            className="text-xs font-bold text-[#1048A4] bg-blue-50 border border-blue-200 px-4 py-2 rounded-lg"
-                        >
-                            Tap to Allow / Load Contacts
-                        </button>
-                    </div>
-                )}
-            </div>
-
-        </div>
-    );
-}
-</file>
-
 <file path="src/pages/Profile.jsx">
 import React from 'react'
 import { useEffect } from 'react';
@@ -1972,55 +1785,6 @@ export default defineConfig([
 </html>
 </file>
 
-<file path="package.json">
-{
-  "name": "expenseengine-frontend",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@capacitor-community/contacts": "^8.0.0",
-    "@capacitor/cli": "^8.5.3",
-    "@capacitor/core": "^8.5.3",
-    "axios": "^1.19.0",
-    "date-fns": "^4.4.0",
-    "dayjs": "^1.11.21",
-    "firebase": "^12.17.1",
-    "jspdf": "^4.2.1",
-    "jspdf-autotable": "^5.0.8",
-    "lucide-react": "^1.31.0",
-    "react": "^19.2.8",
-    "react-day-picker": "^10.0.1",
-    "react-dom": "^19.2.8",
-    "react-hot-toast": "^2.6.0",
-    "react-router-dom": "^7.18.2",
-    "swr": "^2.5.1"
-  },
-  "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@tailwindcss/postcss": "^4.3.3",
-    "@tailwindcss/vite": "^4.3.3",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.4",
-    "autoprefixer": "^10.5.4",
-    "eslint": "^10.8.0",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.3",
-    "globals": "^17.7.0",
-    "postcss": "^8.5.26",
-    "tailwindcss": "^4.3.3",
-    "vite": "^8.2.0"
-  }
-}
-</file>
-
 <file path="postcss.config.js">
 export default {
   plugins: {
@@ -2101,6 +1865,7 @@ export default function AddWorker() {
 
     const [name, setName] = useState(location.state?.initialName || '');
     const [phone, setPhone] = useState(location.state?.initialPhone || '');
+    const [upiHandle, setUpiHandle] = useState("@ybl");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // ─── Strict Validation Handlers ──────────────────────────────
@@ -2176,9 +1941,14 @@ export default function AddWorker() {
 
         try {
             setIsSubmitting(true);
+            
+            // 💡 Combine phone number + chosen handle suffix if phone is provided
+            const finalUpiId = phone.length === 10 ? `${phone}${upiHandle}` : "";
+
             const payload = {
                 name: name.trim(),
                 phoneNumber: phone,
+                upiId: finalUpiId, // 💡 Send optional UPI ID
                 isActive: true
             };
 
@@ -2247,6 +2017,33 @@ export default function AddWorker() {
                         </div>
                     </div>
 
+                    {/* Optional UPI ID Builder Section */}
+                    <div className="pt-2">
+                        <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-1.5">
+                            Worker UPI ID <span className="normal-case tracking-normal font-normal text-gray-400">(Optional)</span>
+                        </label>
+                        <div className="flex gap-2 items-center">
+                            {/* Auto-populated preview box */}
+                            <div className="flex-1 bg-gray-50 border border-gray-300 rounded-xl px-3.5 py-3 text-sm font-bold text-gray-700 truncate select-none">
+                                {phone ? `${phone}${upiHandle}` : "Enter phone above..."}
+                            </div>
+                            
+                            {/* Bank / App Handle Suffix Selector */}
+                            <select 
+                                value={upiHandle} 
+                                onChange={(e) => setUpiHandle(e.target.value)}
+                                className="bg-white border border-gray-300 rounded-xl px-3 py-3 text-sm font-bold text-[#1048A4] outline-none cursor-pointer shrink-0 shadow-sm"
+                            >
+                                <option value="@ybl">@ybl (PhonePe)</option>
+                                <option value="@okaxis">@okaxis (GPay)</option>
+                                <option value="@okicici">@okicici (GPay)</option>
+                                <option value="@oksbi">@oksbi (GPay)</option>
+                                <option value="@paytm">@paytm (Paytm)</option>
+                                <option value="@ptaxis">@ptaxis (Paytm)</option>
+                            </select>
+                        </div>
+                    </div>
+
                 </form>
             </div>
 
@@ -2265,6 +2062,1302 @@ export default function AddWorker() {
         </div>
     );
 }
+</file>
+
+<file path="src/pages/Expenses.jsx">
+import React, { useEffect, useRef, useState } from 'react'
+import { api, fetcher } from '../lib/api';
+import toast from 'react-hot-toast';
+import BottomNav from '../components/BottomNav';
+import { ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  MoreVertical,
+  FileText,
+  X,
+  ChevronDown,
+  Calendar,
+  IndianRupee,
+  Package,
+  Plus,
+  FileSpreadsheet, 
+  Balloon,
+  Edit2} from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import dayjs from 'dayjs';
+import useSWR from 'swr';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
+
+
+  const CATEGORIES = ["Materials", "Transport", "Food", "Utilities", "Other"];
+  const CHIPS = ["All","Materials", "Transport", "Food", "Utilities", "Other"];
+  const EDIT_REASONS = ["Amount correction", "Category correction", "Date correction", "Payment method correction" ,"Duplicate entry", "Other"];
+
+  function ReportDocIcon ({ className = "w-5 h-5"}) {
+    return (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="8" y1="13" x2="16" y2="13" />
+      <line x1="8" y1="17" x2="12" y2="17" />
+      <line x1="8" y1="9" x2="10" y2="9" />
+    </svg>
+    );
+  }
+
+
+export default function Expenses () {
+  const [currentMonth, setCurrentMonth] = useState(dayjs());
+  const navigate = useNavigate();
+  const location = useLocation();
+  const slideClass = location.state?.slideDirection === 'left' ? 'animate-slide-in-left' : location.state?.slideDirection === 'right' ? 'animate-slide-in-right' : 'animate-fade-in-fast'
+  // Data States
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // UI States
+  const [uiState, setUiState] = useState("default");
+  const [chip, setChip] = useState("All");
+  const [searchQ, setSearchQ] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+
+  // Form States
+  const [fAmount, setFAmount] = useState("");
+  const [fCat, setFCat] = useState("Materials");
+  const [fPaymentMethod, setFPaymentMethod] = useState("Cash");
+  const [fDate, setFDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [fTime, setFTime] = useState(dayjs().format('HH:mm'));
+  const [fDesc, setFDesc] = useState("");
+
+  const searchRef = useRef(null);
+
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editId, setEditId] = useState(null); 
+  const [fReason, setFReason] = useState(""); 
+  const [isReasonDropdownOpen, setIsReasonDropdownOpen] = useState(false);
+  const [isCatDropdownOpen, setIsCatDropdownOpen] = useState(false);
+
+  // ⚡ 1. SWR Instant Fetch (Grabs data and the mutate refresh tool)
+  const { data: rawLedgerData = [], isLoading, mutate } = useSWR('/ledger', fetcher);
+
+  // ⚡ 2. Instant Filtering (Sorts the cache instantly without states)
+  const expenses = rawLedgerData.filter(entry => entry.entryType === 'Expense');
+  const bossDeposits = rawLedgerData.filter(entry => entry.entryType === 'BossDeposit');
+  const workerAdvances = rawLedgerData.filter(entry => entry.entryType === 'Advance');
+
+  // Handle Saving New Expense to MongoDB
+const handleSave = async () => {
+    if(!fAmount || isNaN(Number(fAmount)) || Number(fAmount) <= 0) return;
+    
+    if(editId && !fReason) {
+      toast.error("Reason for Edit is required!");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const dateObj = new Date(`${fDate}T${fTime}:00`);
+
+      const payload = {
+        amount: Number(fAmount),
+        category: fCat,
+        paymentMethod: fPaymentMethod,
+        description: fDesc,
+        date: dateObj.toISOString()
+      };
+
+      if (editId) {
+        payload.isEdited = true;
+        payload.editReason = fReason;
+        await api.put(`/ledger/${editId}`, payload);
+        toast.success("Transaction updated!");
+      } else {
+        payload.entryType = "Expense";
+        await api.post('/ledger', payload);
+        toast.success("Expense logged!");
+      }
+
+      setFAmount(""); setFCat("Materials"); setFPaymentMethod("Cash"); setFDesc(""); setFReason(""); setEditId(null);
+      setShowAdd(false);
+      setIsEditMode(false);
+      mutate();
+    } catch (error) {
+      console.error("Error saving:", error);
+      toast.error("Failed to save transaction");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // ─── Open Edit Modal Helper ────────────────────────────────
+  const openEditModal = (row) => {
+    setEditId(row._id);
+    setFAmount(row.amount.toString());
+    setFCat(row.category);
+    setFPaymentMethod(row.paymentMethod || "Cash");
+    setFDate(dayjs(row.date).format('YYYY-MM-DD'));
+    setFTime(dayjs(row.date).format('HH:mm'));
+    setFDesc(row.description || "");
+    setFReason(row.editReason || ""); 
+    setShowAdd(true); // Opens the main modal
+  };
+
+  // Dynamic Calculations
+  const monthlyExpenses = expenses.filter(e => dayjs(e.date).isSame(currentMonth, 'month')).reduce((sum, e) => sum + e.amount, 0);
+  const monthlyDeposits = bossDeposits.filter(e => dayjs(e.date).isSame(currentMonth, 'month')).reduce((sum, d) => sum + d.amount, 0);
+  const monthlyAdvances = workerAdvances.filter(e => dayjs(e.date).isSame(currentMonth, 'month')).reduce((sum, a) => sum + a.amount, 0);
+
+  const currentBalance = monthlyDeposits - (monthlyExpenses + monthlyAdvances);
+
+  // 1. All expenses for the selected month
+  const currentMonthExpenses = expenses.filter((e) => dayjs(e.date).isSame(currentMonth, 'month'));
+
+  // 2. Filtered expenses for total display when searching/filtering
+  const filteredExpenses = currentMonthExpenses.filter((e) => {
+    if (uiState === 'search') {
+      const matchesSearch = searchQ.trim() === "" || 
+        (e.category && e.category.toLowerCase().includes(searchQ.toLowerCase())) ||
+        (e.description && e.description.toLowerCase().includes(searchQ.toLowerCase()));
+      const matchesChip = chip === "All" || e.category === chip;
+      return matchesSearch && matchesChip;
+    }
+    return true;
+  });
+
+  // Calculate dynamic date string for the UI slider
+  const dateDisplay = `${currentMonth.startOf('month').format('DD-MMM-YYYY')} to ${currentMonth.endOf('month').format('DD-MMM-YYYY')}`;
+  
+  // Calculate the total ONLY for the filtered items shown on screen
+  const filteredTotal = filteredExpenses.reduce((s, e) => s + e.amount, 0);
+  
+  // Build Chronological Ledger for UI (Compute true running balance on ALL month expenses first!)
+  const buildLedger = () => {
+    const sorted = [...currentMonthExpenses].sort((a, b) => new Date(a.date) - new Date(b.date));
+    let running = monthlyDeposits - monthlyAdvances;
+    
+    const allRowsWithBalance = sorted.map((e) => {
+      running -= e.amount;
+      return { 
+        ...e, 
+        balance: running, 
+        dateKey: dayjs(e.date).format('YYYY-MM-DD'),
+        timeDisplay: new Date(e.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      };
+    });
+
+    // Now apply search/chip filter if in search mode so running balances stay 100% accurate
+    const visibleRows = uiState === 'search'
+      ? allRowsWithBalance.filter((e) => {
+          const matchesSearch = searchQ.trim() === "" || 
+            (e.category && e.category.toLowerCase().includes(searchQ.toLowerCase())) ||
+            (e.description && e.description.toLowerCase().includes(searchQ.toLowerCase()));
+          const matchesChip = chip === "All" || e.category === chip;
+          return matchesSearch && matchesChip;
+        })
+      : allRowsWithBalance;
+
+    const byDate = {};
+    visibleRows.forEach((r) => (byDate[r.dateKey] = byDate[r.dateKey] || []).push(r));
+    
+    return Object.keys(byDate).sort().reverse().map((dk) => ({ dk, rows: byDate[dk].reverse() }));
+  };
+
+  const ledger = buildLedger();
+
+
+  // ─── EXCEL (CSV) EXPORT ─────────────────────────────────────────────
+  const handleExportExcel = () => {
+    // Create Headers
+    let csvContent = "Date,Time,Category,Description,Amount (INR),Balance (INR)\n";
+
+    // Loop through your chronological ledger and build the rows
+    [...ledger].reverse().forEach(({ dk, rows}) => {
+      [...rows].reverse().forEach(row => {
+        const method = row.paymentMethod || "Cash";
+        let finalDesc = `${row.description || "-"} [${method}]`;
+        if(row.isEdited){
+          finalDesc += ` (EDITED: ${row.editReason})`;
+        }
+        const safeDesc = `"${finalDesc.replace(/"/g, '""')}"`;
+        csvContent += `${dayjs(dk).format('DD-MMM-YYYY')},${row.timeDisplay},${row.category},${safeDesc},${row.amount},${row.balance}\n`;
+      });
+    });
+
+    // Trigger Download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Site_Expenses_${currentMonth.format('MMM_YYYY')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setUiState("default");
+    toast.success(" Excel downloaded! ");
+  }
+
+
+  // ─── PDF EXPORT ────────────────────────────────────────
+  const handleExportPDF = () => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    // Header
+    doc.setFontSize(18);
+    doc.setTextColor(157, 0, 82)
+    doc.text("Site Expense Report", 14, 20);
+
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(`Billing Period: ${dateDisplay}`, 14, 28);
+
+    // Summary Box
+    doc.setFontSize(10);
+    doc.setTextColor(0);
+    doc.text(`Total Spent: Rs. ${monthlyExpenses.toLocaleString("en-IN")}`, 14, 38);
+    doc.text(`Final Balance: Rs. ${currentBalance.toLocaleString("en-IN")}`, pageWidth - 14, 38, { align: "right" });
+
+    // Format the table data
+    const tableRows = [];
+    [...ledger].reverse().forEach(({ dk, rows}) => {
+      [...rows].reverse().forEach(row => {
+        const method = row.paymentMethod || "Cash";
+        let finalDesc = `${row.description || "-"} [${method}]`;
+        if (row.isEdited) {
+          finalDesc += `\n(Edited: ${row.editReason})`;
+        }
+
+        tableRows.push([
+          dayjs(dk).format('DD-MMM-YYYY'),
+          row.category,
+          finalDesc,
+          `Rs. ${row.amount.toLocaleString("en-IN")}`,
+          `Rs. ${row.balance.toLocaleString("en-IN")}`
+        ]);
+      });
+    });
+
+    // Generate the Table
+    autoTable(doc,{
+      startY: 45,
+      head: [['Date', 'Category', 'Description', 'Amount', 'Balance']],
+      body: tableRows,
+      theme: 'striped',
+      headStyles: { fillColor: [157, 0, 82] },
+      styles: { fontSize: 9 },
+      columnStyles: {
+        3: { halign: 'right', textColor: [192, 57, 43] },
+        4: { halign: 'right', fontStyle: 'bold' } 
+      }
+    });
+
+    // Download
+    doc.save(`Site_Expenses_${currentMonth.format('MMM_YYYY')}.pdf`);
+    
+    setUiState("default"); // Close the modal
+    toast.success("PDF downloaded!");
+  }
+
+
+  // ─── Floating Action Button ────────────────────────────────────────────────
+  const FAB = () => (
+    <button
+      onClick={() => {
+        setEditId(null); 
+        setFAmount(""); setFCat("Materials"); setFPaymentMethod("Cash"); setFDesc(""); setFReason("");
+        setFDate(dayjs().format('YYYY-MM-DD'));
+        setFTime(dayjs().format('HH:mm'));
+        setShowAdd(true);
+      }}
+      className="fixed z-20 flex items-center gap-1.5 font-bold text-white text-[13px] tracking-wide bg-[#9D0052]"
+      style={{ bottom: 84, right: 16, borderRadius: 999, padding: "11px 18px", boxShadow: "0 3px 10px rgba(157,0,82,0.45)" }}
+    >
+      <Plus className="w-4 h-4" />
+      LOG EXPENSE
+    </button>
+  );
+
+// ─── Unified Add/Edit Expense Modal ───────────────────────────────────────
+  const renderAddModal = () => (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end max-w-md mx-auto">
+      <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={() => { setShowAdd(false); setEditId(null); }} />
+      <div className="relative bg-white rounded-t-2xl px-5 pt-4 pb-8 animate-slide-up-bottom" style={{ boxShadow: "0 -4px 24px rgba(0,0,0,0.12)" }}>
+        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
+        <div className="flex items-center justify-between mb-4">
+          
+          {/* 1. DYNAMIC TITLE */}
+          <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
+            {editId ? "Edit Transaction" : "Log New Expense"}
+          </h2>
+          
+          <button onClick={() => { setShowAdd(false); setEditId(null); }} className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center">
+            <X className="w-3.5 h-3.5 text-gray-500" />
+          </button>
+        </div>
+
+        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Amount (₹)</label>
+        <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 mb-3 focus-within:border-[#9D0052]">
+          <IndianRupee className="w-5 h-5 text-[#9D0052] shrink-0" />
+          <input type="number" placeholder="0" value={fAmount} onChange={(e) => setFAmount(e.target.value)} className="flex-1 text-2xl font-extrabold text-gray-900 outline-none placeholder-gray-300 bg-transparent w-full" />
+        </div>
+
+        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Payment Method</label>
+        <div className="flex gap-2 mb-3">
+          {['Cash', 'Online', 'Check', 'Other'].map((method) => (
+            <button
+              key={method}
+              type="button"
+              onClick={() => setFPaymentMethod(method)}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-colors ${fPaymentMethod === method ? 'bg-[#9D0052] border-[#9D0052] text-white' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}
+            >
+              {method}
+            </button>
+          ))}
+        </div>
+
+        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Category</label>
+        <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 mb-3 focus-within:border-[#9D0052]">
+          <Package className="w-4 h-4 text-gray-400 shrink-0" />
+          <select value={fCat} onChange={(e) => setFCat(e.target.value)} className="flex-1 text-sm font-semibold text-gray-800 outline-none appearance-none bg-transparent">
+            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+        </div>
+
+        <div className="flex gap-2 mb-3">
+          <div className="flex-1">
+            <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Date</label>
+            <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 focus-within:border-[#9D0052]">
+              <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
+              <input type="date" value={fDate} onChange={(e) => setFDate(e.target.value)} className="flex-1 text-sm font-semibold text-gray-800 outline-none bg-transparent min-w-0" />
+            </div>
+          </div>
+          <div className="w-32">
+            <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Time</label>
+            <div className="border border-gray-200 rounded-lg px-3 py-2.5 focus-within:border-[#9D0052]">
+              <input type="time" value={fTime} onChange={(e) => setFTime(e.target.value)} className="w-full text-sm font-semibold text-gray-800 outline-none bg-transparent" />
+            </div>
+          </div>
+        </div>
+
+        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Description / Notes</label>
+        <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-start gap-2 mb-5 focus-within:border-[#9D0052]">
+          <FileText className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+          <textarea placeholder="e.g. 50 bags of cement" value={fDesc} onChange={(e) => setFDesc(e.target.value)} rows={2} className="flex-1 text-sm text-gray-800 outline-none resize-none placeholder-gray-400 bg-transparent" />
+        </div>
+
+        {/* 2. DYNAMIC REASON DROPDOWN (ONLY SHOWS IF EDITING) */}
+        {editId && (
+          <div className="mb-5 relative">
+            <label className="block text-[11px] font-bold text-[#9D0052] uppercase tracking-widest mb-1">Reason for Edit *</label>
+            <button
+              type="button"
+              onClick={() => {
+                setIsReasonDropdownOpen(!isReasonDropdownOpen);
+                setIsCatDropdownOpen(false);
+              }}
+              className="w-full border-2 border-[#9D0052]/20 rounded-lg px-3 py-2.5 flex items-center justify-between bg-pink-50/30 focus:border-[#9D0052] text-sm font-semibold text-gray-900"
+            >
+              <span className={fReason ? "text-gray-900" : "text-gray-400"}>
+                {fReason || "Select a reason..."}
+              </span>
+              <ChevronDown className={`w-4 h-4 text-[#9D0052] shrink-0 transition-transform ${isReasonDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isReasonDropdownOpen && (
+              <div className="absolute bottom-full left-0 mb-1.5 z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto py-1">
+                {EDIT_REASONS.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => {
+                      setFReason(r);
+                      setIsReasonDropdownOpen(false);
+                    }}
+                    className={`block w-full text-left px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                      fReason === r ? 'bg-pink-50 text-[#9D0052] font-bold' : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 3. DYNAMIC SUBMIT BUTTON */}
+        <button disabled={isSaving} onClick={handleSave} className="w-full bg-[#9D0052] hover:bg-[#800043] active:scale-[0.99] text-white text-sm font-bold rounded-xl py-3.5 tracking-wider uppercase transition-all disabled:opacity-70">
+          {isSaving ? "SAVING..." : editId ? "SAVE CHANGES" : "SAVE EXPENSE"}
+        </button>
+        
+      </div>
+    </div>
+  );
+
+
+  // ─── Ledger Body (Shared List) ─────────────────────────────────────────────
+  const renderLedgerBody = () => (
+    <>
+      <div className="flex items-center bg-gray-100 border-b border-gray-300 px-4 py-2 shrink-0">
+        <span className="flex-1 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Date</span>
+        <span className="text-[11px] font-bold text-[#C0392B] uppercase tracking-wider">Cash Out</span>
+      </div>
+
+      <div className="pb-10">
+        {isLoading ? (
+            <p className="p-8 text-center text-sm text-gray-400 font-medium">Loading ledger...</p>
+        ) : ledger.length === 0 ? (
+            <p className="p-8 text-center text-sm text-gray-400 font-medium">No expenses logged yet.</p>
+        ) : ledger.map(({ dk, rows }) => (
+          <div key={dk}>
+            <div className="flex items-center justify-between bg-gray-50 border-b border-gray-200 px-4 py-1.5">
+              <span className="text-[12px] font-bold text-gray-600">{dayjs(dk).format('ddd, DD MMM YYYY')}</span>
+              <span className="text-[11px] font-semibold text-gray-400 tabular-nums">
+                ₹{rows.reduce((s, r) => s + r.amount, 0).toLocaleString("en-IN")}
+              </span>
+            </div>
+            {rows.map((row) => (
+              <div key={row._id} className={`flex items-start px-4 py-2.5 border-b border-gray-100 ${row.isEdited ? 'bg-amber-50/30' : ''}`}>
+                <div className="flex-1 min-w-0 pr-2">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[13px] font-semibold text-gray-900 leading-tight">{row.category}</p>
+                    {row.isEdited && (
+                      <span className="text-[8px] font-bold text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                        Edited
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                    <p className="text-[11px] text-gray-400">
+                      {row.timeDisplay} {row.description ? `· ${row.description}` : ''}
+                    </p>
+                    <span className="rounded bg-pink-50 border border-[#9D0052]/20 px-1.5 py-0.5 text-[8px] font-extrabold text-[#9D0052] uppercase leading-none">
+                      {row.paymentMethod || 'Cash'}
+                    </span>
+                  </div>
+                  {row.isEdited && (
+                    <p className="text-[10px] text-amber-600 mt-0.5 italic">Reason: {row.editReason}</p>
+                  )}
+                </div>
+                
+                <div className="text-right shrink-0 flex items-center gap-3">
+                  <div>
+                    <p className="text-[14px] font-extrabold text-[#C0392B] leading-tight tabular-nums">
+                      {row.amount.toLocaleString("en-IN")}
+                    </p>
+                    <p className="text-[11px] text-gray-400 mt-0.5 tabular-nums">
+                      Bal {row.balance >= 0 ? "" : "-"}₹{Math.abs(row.balance).toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                  
+                  {isEditMode && (
+                    <button onClick={() => openEditModal(row)} className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 text-gray-600 transition">
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+
+        <div className="flex items-center justify-between px-4 py-3 border-t-2 border-gray-400 bg-gray-50">
+          <span className="text-[12px] font-bold text-gray-700 uppercase tracking-wide">Total Expenses</span>
+          <span className="text-[14px] font-extrabold text-[#C0392B] tabular-nums">
+            ₹{filteredTotal.toLocaleString("en-IN")}
+          </span>
+        </div>
+      </div>
+    </>
+  );
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // STATE 1: Default & Report Modal
+  // ════════════════════════════════════════════════════════════════════════════
+  if(uiState === "default" || uiState === "report") return (
+    <div className={`fixed inset-0 flex flex-col bg-white overflow-hidden max-w-md mx-auto font-sans ${slideClass}`}>
+
+      {/* ENTIRE SCROLLABLE PAGE CONTENT */}
+      <div className="flex-1 overflow-y-auto pb-24" style={{ scrollbarWidth: 'none' }}>
+          {/* Maroon App Bar */}
+      <div className='bg-[#9D0052] pt-6 pb-0'>
+        <div className='flex items-center gap-2 pb-3 px-4'>
+          <button onClick={() => navigate('/cashbook')} className='text-white p-1'><ArrowLeft className='w-5 h-5'/></button>
+          <span className="text-white text-[15px] font-bold tracking-tight flex-1">Site Expenses</span>
+          <button className='text-white p-1.5'
+          onClick={() => setUiState("report")}>
+            <ReportDocIcon className="w-5 h-5"/>
+          </button>
+          {/* SEARCH BUTTON */}
+          <button className='text-white p-1.5' onClick={() => { setUiState("search"); setTimeout(() => searchRef.current?.focus(), 50); }}>
+            <Search className="w-5 h-5" />
+          </button>
+          <button 
+          onClick={() => setIsEditMode(!isEditMode)}
+          className= {`p-1.5 rounded-full transition-colors ${isEditMode ? 'bg-white text-[#9D0052]' : 'text-white'}`}><MoreVertical className='w-5 h-5'/></button>
+        </div>
+
+        {/* Summary Card */}
+        <div className='bg-white overflow-hidden mx-4' style={{ borderRadius: 14 }}>
+          <div className='flex'>
+            <div className='flex-1 px-4 py-2.5 text-center'>
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Total Spent</p>
+              <p className="text-[20px] font-extrabold text-[#C0392B] tabular-nums leading-none">
+                ₹{monthlyExpenses.toLocaleString("en-IN")}
+              </p>
+            </div>
+
+            <div className='w-px bg-gray-200 my-2.5'/>
+            <div className='flex-1 px-4 py-2.5 text-center'>
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Balance</p>
+              <p className={`text-[20px] font-extrabold tabular-nums leading-none ${currentBalance < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                ₹{currentBalance.toLocaleString("en-IN")}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Date nav strip */}
+        <div className='flex items-center justify-between bg-[#7B0040] px-3 py-2 mt-4'>
+          <button onClick ={() => setCurrentMonth(prev => prev.subtract(1, 'month'))}className="text-white/70 p-1"><ChevronLeft className="w-4 h-4" /></button>
+          <span className="text-white text-[12px] font-semibold tracking-wide">{dateDisplay}</span>
+          <button onClick={() => setCurrentMonth(prev => prev.add(1, 'month'))} className="text-white/70 p-1"><ChevronRight className="w-4 h-4" /></button>
+        </div>
+      </div>
+
+      {renderLedgerBody()}
+      </div>
+      <FAB/>
+      <BottomNav/>
+      {showAdd && renderAddModal()}
+
+
+      {/* Report Modal */}
+      {uiState === "report" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center max-w-md mx-auto">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setUiState("default")} />
+          <div className="relative bg-white rounded-2xl w-64 overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <span className="text-[14px] font-bold text-gray-900">Report</span>
+              <button onClick={() => setUiState("default")} className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100">
+                <X className="w-3.5 h-3.5 text-gray-500" />
+              </button>
+            </div>
+            <button onClick={handleExportPDF} className="w-full flex items-center gap-3 px-4 py-4 hover:bg-gray-50 transition-colors">
+              <div className="w-9 h-9 bg-red-50 rounded-lg flex items-center justify-center shrink-0">
+                <ReportDocIcon className="w-5 h-5 text-red-600" />
+              </div>
+              <span className="text-[14px] font-semibold text-gray-800">PDF</span>
+            </button>
+            <div className="h-px bg-gray-100 mx-4" />
+            <button onClick={handleExportExcel} className="w-full flex items-center gap-3 px-4 py-4 hover:bg-gray-50 transition-colors">
+              <div className="w-9 h-9 bg-green-50 rounded-lg flex items-center justify-center shrink-0">
+                <FileSpreadsheet className="w-5 h-5 text-green-600" />
+              </div>
+              <span className="text-[14px] font-semibold text-gray-800">Excel</span>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // STATE 2: Search View
+  // ════════════════════════════════════════════════════════════════════════════
+
+
+  return (
+    <div className={`fixed inset-0 flex flex-col bg-white overflow-hidden max-w-md mx-auto font-sans ${slideClass}`}>
+      
+      {/* ENTIRE SCROLLABLE PAGE CONTENT */}
+      <div className="flex-1 overflow-y-auto pb-24" style={{ scrollbarWidth: 'none' }}>
+          <div className="bg-white border-b border-gray-200 flex items-center gap-2 px-3 pt-6 pb-3">
+        <button onClick={() => { setUiState("default"); setSearchQ(""); }} className="text-gray-600 p-1">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <Search className="w-4 h-4 text-gray-400 shrink-0" />
+        <input
+          ref={searchRef}
+          type="text"
+          placeholder="Search categories or notes..."
+          value={searchQ}
+          onChange={(e) => setSearchQ(e.target.value)}
+          className="flex-1 text-[15px] text-gray-900 outline-none placeholder-gray-400 bg-transparent"
+        />
+        <button className="text-gray-600 p-1" onClick={() => setUiState("report")}>
+          <ReportDocIcon className="w-5 h-5" />
+        </button>
+        <button onClick={() => setIsEditMode(!isEditMode)} className="text-gray-600 p-1 "><MoreVertical className="w-5 h-5" /></button>
+      </div>
+
+      <div className="bg-[#9D0052] flex gap-2 px-4 py-2.5 overflow-x-auto shrink-0" style={{ scrollbarWidth: "none" }}>
+        {CHIPS.map((c) => {
+          const active = chip === c;
+          return (
+            <button
+              key={c}
+              onClick={() => setChip(c)}
+              className="shrink-0 text-[12px] font-semibold px-4 py-1.5 transition-all"
+              style={{
+                borderRadius: 999,
+                border: active ? "2px solid #ffffff" : "2px solid rgba(255,255,255,0.35)",
+                background: active ? "rgba(255,255,255,0.18)" : "transparent",
+                color: active ? "#ffffff" : "rgba(255,255,255,0.65)",
+              }}
+            >
+              {c}
+            </button>
+          );
+        })}
+      </div>
+
+      {renderLedgerBody()}
+      </div>
+      <FAB />
+      <BottomNav />
+      {showAdd && renderAddModal()}
+    </div>
+  )
+}
+</file>
+
+<file path="src/pages/PickContact.jsx">
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { ArrowLeft, Search, Plus, User } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Contacts } from '@capacitor-community/contacts';
+import { Capacitor } from '@capacitor/core';
+
+export default function PickContact() {
+    const navigate = useNavigate();
+    const location = useLocation();
+    const slideClass = location.state?.slideDirection === 'left' ? 'animate-slide-in-left' : 'animate-slide-in-right';
+
+    const [searchQuery, setSearchQuery] = useState('');
+    const [deviceContacts, setDeviceContacts] = useState(() => {
+    const saved = localStorage.getItem('cachedDeviceContacts');
+    return saved ? JSON.parse(saved) : [];
+    });
+    const [isLoading, setIsLoading] = useState(false);
+
+    
+
+    // Automatically load all contacts when opening the page on Android APK!
+    useEffect(() => {
+        if (Capacitor.isNativePlatform()) {
+            loadAllNativeContacts();
+        }
+    }, []);
+
+    // 1. NATIVE ANDROID APK: Grabs EVERY contact in the phone automatically!
+    const loadAllNativeContacts = async () => {
+        if (!Capacitor.isNativePlatform()) return;
+        try {
+            setIsLoading(true);
+            const permission = await Contacts.requestPermissions();
+            if (permission.contacts !== 'granted') {
+                toast.error("Please allow contact permission to see your contacts");
+                return;
+            }
+
+            const result = await Contacts.getContacts({
+                projection: { name: true, phones: true }
+            });
+
+            const allContacts = [];
+            result.contacts.forEach((c, idx) => {
+                const displayName = c.name?.display || '';
+                const rawPhone = c.phones?.[0]?.number || '';
+                const cleanPhone = rawPhone.replace(/\D/g, '').slice(-10);
+
+                if (cleanPhone.length === 10) {
+                    allContacts.push({
+                        id: c.contactId || idx,
+                        name: displayName || `+91 ${cleanPhone}`,
+                        phone: cleanPhone
+                    });
+                }
+            });
+
+            // Sort alphabetically just like Khatabook
+            allContacts.sort((a, b) => a.name.localeCompare(b.name));
+            setDeviceContacts(allContacts);
+        } catch (error) {
+            console.error("Error loading native contacts:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // 2. WEB BROWSER FALLBACK (When testing in Chrome before building APK)
+    const loadContacts = async () => {
+
+        if (Capacitor.isNativePlatform()) {
+            return loadAllNativeContacts();
+        }
+
+        if ('contacts' in navigator && 'select' in navigator.contacts) {
+            try {
+                setIsLoading(true);
+                const contacts = await navigator.contacts.select(['name', 'tel'], { multiple: true });
+                const formatted = contacts.map((c, idx) => ({
+                    id: idx,
+                    name: c.name?.[0] || 'Unknown',
+                    phone: (c.tel?.[0] || '').replace(/\D/g, '').slice(-10)
+                })).filter(c => c.phone.length === 10);
+                setDeviceContacts(formatted);
+            } catch (error) {
+                console.log("Contact picker closed or denied:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        } else {
+            toast("Full automatic contact list works inside the Android APK!");
+        }
+    };
+
+    // Filter contacts based on search query
+    const filteredContacts = deviceContacts.filter(c => 
+        c.name.toLowerCase().includes(searchQuery.toLowerCase()) || c.phone.includes(searchQuery)
+    );
+
+    const handleSelectContact = (name, phone) => {
+        navigate('/add-worker', {
+            state: { initialName: name, initialPhone: phone, slideDirection: 'fade' }
+        });
+    };
+
+    return (
+        <div className="fixed inset-0 flex flex-col bg-gray-50 max-w-md mx-auto font-sans overflow-hidden animate-slide-up-bottom z-50">
+            
+            {/* Top Blue Header with Search Bar */}
+            <header className="bg-[#1048A4] text-white px-4 pt-4 pb-3 flex flex-col gap-3 shrink-0 shadow-md">
+                <div className="flex items-center gap-3">
+                    <button onClick={() => navigate(-1)} className="p-1 rounded-full active:scale-95 transition">
+                        <ArrowLeft className="w-6 h-6" />
+                    </button>
+                    <div className="flex-1 bg-white rounded-lg px-3 py-2 flex items-center gap-2">
+                        <input 
+                            type="text"
+                            placeholder="Customer name"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full text-sm font-semibold text-gray-900 outline-none bg-transparent placeholder:text-gray-400"
+                            autoFocus
+                        />
+                        <Search className="w-4 h-4 text-gray-400 shrink-0" />
+                    </div>
+                </div>
+            </header>
+
+            {/* Contact List Area */}
+            <div className="flex-1 overflow-y-auto bg-white divide-y divide-gray-100">
+                
+                {/* Add Worker / Customer Row at Top (matches image_cbd30a.png)[cite: 35] */}
+                <div 
+                    onClick={() => navigate('/add-worker', { state: { slideDirection: 'fade' } })}
+                    className="flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 cursor-pointer transition"
+                >
+                    <div className="flex items-center gap-3.5">
+                        <div className="w-11 h-11 rounded-full border-2 border-dashed border-[#1048A4] flex items-center justify-center text-[#1048A4] bg-blue-50/50">
+                            <Plus className="w-5 h-5 stroke-[2.5]" />
+                        </div>
+                        <span className="text-[15px] font-bold text-[#1048A4]">Add Worker</span>
+                    </div>
+                    <span className="text-gray-400 text-lg font-bold">&gt;</span>
+                </div>
+
+                {/* Native Device Contacts or Fallback List */}
+                {isLoading ? (
+                    <p className="text-center text-gray-400 py-10 text-sm">Loading device contacts...</p>
+                ) : filteredContacts.length > 0 ? (
+                    filteredContacts.map((c) => (
+                        <div 
+                            key={c.id}
+                            onClick={() => handleSelectContact(c.name, c.phone)}
+                            className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 cursor-pointer transition"
+                        >
+                            <div className="flex items-center gap-3.5">
+                                <div className="w-11 h-11 rounded-full bg-[#1048A4] text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                                    {c.name.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                    <p className="text-[14px] font-bold text-gray-900 leading-tight">{c.name}</p>
+                                    <p className="text-[12px] text-gray-400 font-medium mt-0.5">+91 {c.phone}</p>
+                                </div>
+                            </div>
+                            <div className="w-7 h-7 rounded-full bg-blue-50 text-[#1048A4] flex items-center justify-center font-bold text-xs">
+                                +
+                            </div>
+                        </div>
+                    ))
+                ) : (
+                    <div className="text-center py-8 px-4">
+                        <p className="text-gray-500 text-sm font-semibold mb-3">Want to import phone contacts?</p>
+                        <button 
+                            onClick={loadAllNativeContacts}
+                            className="w-full bg-[#1048A4] text-white text-sm font-bold py-3 rounded-xl shadow-md active:scale-98 transition flex items-center justify-center gap-2"
+                        >
+                            <Plus className="w-4 h-4" /> Load All Phone Contacts
+                        </button>
+                    </div>
+                )}
+            </div>
+
+        </div>
+    );
+}
+</file>
+
+<file path="src/pages/WorkerLedger.jsx">
+import React, { useState, useMemo } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import useSWR, { mutate } from 'swr';
+import { api, fetcher } from '../lib/api';
+import dayjs from 'dayjs';
+import toast from 'react-hot-toast';
+import { ArrowLeft, Pencil, ChevronDown, Plus, X, Calendar, Clock3, IndianRupee, FileText } from 'lucide-react';
+
+const WorkerLedger = () => {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const location = useLocation();
+    
+    // SWR Fetchers placed at the top
+    const { data: workerData } = useSWR(`/workers/${id}`, fetcher);
+    const { data: ledgerHistory = [], isLoading } = useSWR(`/ledger/worker/${id}`, fetcher);
+    
+    // Grab data safely after fetchers
+    const workerName = workerData?.name || location.state?.workerName || "Worker";
+    const isActive = workerData ? workerData.isActive !== false : location.state?.isActive !== false;
+
+    // UI States
+    const [profilePeriod, setProfilePeriod] = useState(dayjs().format('MMM YYYY'));
+    const [isEditMode, setIsEditMode] = useState(false);
+    
+    // Edit Modal States
+    const [showModal, setShowModal] = useState(false);
+    const [editId, setEditId] = useState(null);
+    const [formData, setFormData] = useState({ amount: '', notes: '', reason: '', paymentMethod: 'Cash' });
+    const [isSaving, setIsSaving] = useState(false);
+    const EDIT_REASONS = ["Amount correction", "Date correction", "Payment method correction" ,"Duplicate entry", "Other"];
+    const [isReasonDropdownOpen, setIsReasonDropdownOpen] = useState(false);
+    const [entryDate, setEntryDate] = useState(dayjs().format('YYYY-MM-DD'));
+    const [entryTime, setEntryTime] = useState(dayjs().format('HH:mm'));
+    // 🚨 BUG FIX 1: Ensure ledgerHistory is always treated as an array so .filter() doesn't crash
+    const safeHistory = Array.isArray(ledgerHistory) ? ledgerHistory : [];
+
+    // Filter math for the selected month
+    // 🚨 BUG FIX: Safe Filter Math for the selected month
+    const visibleEntries = safeHistory.filter(entry => {
+        // Fallback to createdAt if date is missing
+        const recordDate = entry.date || entry.createdAt; 
+        if (!recordDate) return false;
+        
+        // Convert the database date to match the "MMM YYYY" dropdown exactly
+        const entryMonthYear = dayjs(recordDate).format('MMM YYYY');
+        return entryMonthYear === profilePeriod;
+    });
+
+    const periodTotal = visibleEntries.reduce((sum, e) => sum + e.amount, 0);
+    const totalAdvance = safeHistory.reduce((sum, e) => sum + e.amount, 0);
+    // 🚨 BUG FIX 2: Use dayjs to generate the dropdown options so they match the filter perfectly
+    const monthOptions = useMemo(() => {
+        return Array.from({ length: 12 }).map((_, i) => 
+            dayjs().subtract(i, 'month').format('MMM YYYY')
+        );
+    }, []);
+
+    const formatMoney = (amount) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(amount);
+
+    // Unified Handle Save (Add & Edit)
+    const handleSave = async (e) => {
+        e.preventDefault();
+        if (!formData.amount) return toast.error("Amount required!");
+        if (editId && !formData.reason) return toast.error("Reason for Edit is required!");
+
+        try {
+            setIsSaving(true);
+            const payload = {
+                amount: Number(formData.amount),
+                paymentMethod: formData.paymentMethod || "Cash",
+                description: formData.notes,
+                date: dayjs(`${entryDate}T${entryTime}`).toISOString()
+            };
+
+            if (editId) {
+                payload.isEdited = true;
+                payload.editReason = formData.reason;
+                await api.put(`/ledger/${editId}`, payload);
+                toast.success("Transaction updated!");
+            } else {
+                payload.entryType = "Advance";
+                payload.workerId = id;
+                await api.post('/ledger', payload);
+                toast.success("Advance logged!");
+            }
+
+            setShowModal(false);
+            setEditId(null);
+            setFormData({ amount: '', notes: '', reason: '', paymentMethod: 'Cash' });
+            
+            // Instantly refresh this page AND the cashbook cache
+            mutate(`/ledger/worker/${id}`);
+            mutate('/ledger'); 
+        } catch (error) {
+            toast.error("Failed to save.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const openEditModal = (entry) => {
+
+        setEntryDate(dayjs(entry.date).format('YYYY-MM-DD'));
+        setEntryTime(dayjs(entry.date).format('HH:mm'));
+        setEditId(entry._id);
+        setFormData({ 
+            amount: entry.amount.toString(), 
+            notes: entry.description || "", 
+            reason: entry.editReason || "",
+            paymentMethod: entry.paymentMethod || "Cash"
+        });
+        setShowModal(true);
+    };
+
+    return (
+        <main className="fixed inset-0 flex flex-col bg-[#F9FAFB] max-w-md mx-auto overflow-hidden animate-slide-in-right font-sans">
+            
+            {/* 1. BLUE HEADER */}
+            <header className="bg-[#1048A4] px-4 pb-12 pt-4 text-white">
+                <div className="flex items-center gap-3">
+                    <button onClick={() => navigate(-1)} className="flex h-10 w-10 shrink-0 items-center justify-center active:scale-95 transition">
+                        <ArrowLeft className="h-6 w-6" />
+                    </button>
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 text-lg font-bold">
+                            {workerName.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                            <p className="truncate text-[17px] font-semibold leading-tight">{workerName}</p>
+                            <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-200 mt-0.5">
+                                {isActive ? "Active worker" : "Inactive worker"}
+                            </p>
+                        </div>
+                    </div>
+                    {/* Pencil Edit Button */}
+                    {isActive && (
+                      <button onClick={() => setIsEditMode(!isEditMode)} className={`flex h-10 w-10 items-center justify-center rounded-full transition active:scale-95 ${isEditMode ? "bg-white text-[#1048A4]" : "text-white bg-white/10"}`}>
+                          <Pencil className="h-4 w-4" />
+                      </button>
+                  )}
+                </div>
+            </header>
+
+          {/* 2. OVERLAPPING SUMMARY CARD (Fixed Balance Display) */}
+            <section className="-mt-10 px-4 relative z-10">
+                <div className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-xl">
+                    <div className="flex items-end justify-between">
+                        <div>
+                            <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-500">Advance this month</p>
+                            {/* Make the active period total the large red number */}
+                            <p className="mt-1 text-[26px] font-bold text-[#C0392B]">₹{formatMoney(periodTotal)}</p>
+                        </div>
+                        <div className="text-right border-l border-gray-200 pl-4">
+                            <p className="text-[9px] font-bold uppercase text-gray-400 mb-0.5">LIFETIME</p>
+                            {/* Show the lifetime total as the secondary metric */}
+                            <p className={`text-sm font-extrabold ${totalAdvance > 0 ? 'text-[#C0392B]' : 'text-gray-800'}`}>₹{formatMoney(totalAdvance)}</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* 3. FILTER BAR */}
+            <section className="flex items-center justify-between px-5 py-4 mt-2">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Transaction period</span>
+                <div className="flex h-9 items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 focus-within:border-[#1048A4] transition-colors">
+                    <select value={profilePeriod} onChange={(e) => setProfilePeriod(e.target.value)} className="appearance-none bg-transparent text-[13px] font-bold outline-none text-[#1048A4] cursor-pointer">
+                        {monthOptions.map(m => <option key={m}>{m}</option>)}
+                    </select>
+                    <ChevronDown className="h-3.5 w-3.5 text-[#1048A4] pointer-events-none" />
+                </div>
+            </section>
+
+            <div className="flex border-y border-gray-200 bg-gray-100 px-5 py-2">
+                <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">Entries</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Amount</span>
+            </div>
+
+            {/* 4. LEDGER LIST */}
+            <section className="flex-1 overflow-y-auto bg-white pb-28">
+                {isLoading ? (
+                    <p className="text-center text-gray-500 py-8 text-sm font-medium">Loading history...</p>
+                ) : visibleEntries.length > 0 ? (
+                    visibleEntries.map((entry) => (
+                        <div key={entry._id} className="border-b border-gray-100">
+                            <div className="flex items-start px-5 py-4">
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-[13px] font-bold text-gray-900">{dayjs(entry.date).format('DD MMM YY • hh:mm A')}</p>
+                                        {entry.isEdited && (
+                                            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[8px] font-extrabold text-amber-700">EDITED</span>
+                                        )}
+                                    </div>
+                                    <div className="mt-2 rounded-md bg-gray-50 border border-gray-200 p-2 mr-4 flex items-center justify-between gap-2">
+                                        <p className="text-[12px] text-gray-600 leading-snug font-medium wrap-break">
+                                            {entry.description || "Advance"}
+                                        </p>
+                                        <span className="shrink-0 rounded bg-white border border-gray-200 px-1.5 py-0.5 text-[9px] font-extrabold text-[#9D0052] uppercase">
+                                            {entry.paymentMethod || "Cash"}
+                                        </span>
+                                    </div>
+                                    {entry.isEdited && entry.editReason && (
+                                        <p className="mt-1.5 text-[10px] font-bold text-amber-700">Reason: {entry.editReason}</p>
+                                    )}
+                                </div>
+                                <div className="ml-3 flex items-start gap-2">
+                                    <div className="rounded bg-red-50 px-2.5 py-1.5 border border-red-100">
+                                        <p className="text-[15px] font-bold tabular-nums text-[#C0392B]">₹{formatMoney(entry.amount)}</p>
+                                    </div>
+                                    {isEditMode && (
+                                        <button onClick={() => openEditModal(entry)} className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white shadow-sm text-gray-500 active:scale-95 transition mt-0.5">
+                                            <Pencil className="h-3.5 w-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ))
+                ) : (
+                    <div className="px-4 py-12 text-center">
+                        <p className="text-gray-400 text-sm font-semibold">No transactions for {profilePeriod}</p>
+                    </div>
+                )}
+            </section>
+
+            {/* 5. FLOATING BOTTOM BUTTON */}
+            {isActive && (
+              <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 z-20 animate-slide-up-bottom">
+                  <button 
+                      onClick={() => { 
+                          setEditId(null); 
+                          setFormData({ amount: '', notes: '', reason: '', paymentMethod: 'Cash' }); 
+                          setEntryDate(dayjs().format('YYYY-MM-DD'));
+                          setEntryTime(dayjs().format('HH:mm'));
+                          setShowModal(true);
+                      }}
+                      className="w-full bg-[#9D0052] text-white font-bold text-[15px] tracking-wide py-3.5 rounded-xl shadow-lg active:scale-[0.98] transition flex justify-center items-center gap-2"
+                  >
+                      <Plus className="w-5 h-5" /> LOG ADVANCE
+                  </button>
+              </div>
+          )}
+
+            {/* 6. UNIFIED ADD/EDIT MODAL (True Bottom Sheet) */}
+            {showModal && (
+                <div className="fixed inset-0 z-50 flex flex-col justify-end max-w-md mx-auto">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-fade-in" onClick={() => setShowModal(false)} />
+                    
+                    <div className="relative bg-white rounded-t-2xl shadow-[0_-4px_24px_rgba(0,0,0,0.12)] flex flex-col animate-slide-up-bottom px-5 pt-4 pb-8">
+                        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4 shrink-0" />
+                        
+                        <div className="flex items-center justify-between mb-4 shrink-0">
+                            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
+                                {editId ? "Edit Advance" : "Log Advance"}
+                            </h2>
+                            <button onClick={() => setShowModal(false)} className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center transition hover:bg-gray-200">
+                                <X className="w-3.5 h-3.5 text-gray-500" />
+                            </button>
+                        </div>
+
+                        <div className="overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
+                            <form id="workerLedgerForm" onSubmit={handleSave}>
+                                
+                                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Amount (₹)</label>
+                                <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 mb-3 focus-within:border-[#9D0052] transition-colors bg-white">
+                                    <IndianRupee className="w-5 h-5 text-[#9D0052] shrink-0" />
+                                    <input type="number" required value={formData.amount} onChange={(e) => setFormData({...formData, amount: e.target.value})} placeholder="0" className="flex-1 text-2xl font-bold text-gray-900 outline-none placeholder-gray-300 bg-transparent w-full" />
+                                </div>
+
+                                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Payment Method</label>
+                                <div className="flex gap-2 mb-3">
+                                    {['Cash', 'Online', 'Check', 'Other'].map((method) => {
+                                        const isSelected = (formData.paymentMethod || 'Cash') === method;
+                                        return (
+                                            <button
+                                                key={method}
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, paymentMethod: method })}
+                                                className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-colors ${isSelected ? 'bg-[#9D0052] border-[#9D0052] text-white' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}
+                                            >
+                                                {method}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                <div className="flex gap-2 mb-3">
+                                    <div className="flex-1">
+                                        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Date</label>
+                                        <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 focus-within:border-[#9D0052] bg-white">
+                                            <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
+                                            <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className="flex-1 text-[13px] font-semibold text-gray-800 outline-none bg-transparent min-w-0" />
+                                        </div>
+                                    </div>
+                                    <div className="w-32">
+                                        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Time</label>
+                                        <div className="border border-gray-200 rounded-lg px-3 py-2.5 focus-within:border-[#9D0052] bg-white flex items-center gap-1">
+                                            <input type="time" value={entryTime} onChange={(e) => setEntryTime(e.target.value)} className="w-full text-[13px] font-semibold text-gray-800 outline-none bg-transparent" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Description / Notes</label>
+                                <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-start gap-2 mb-5 focus-within:border-[#9D0052] bg-white">
+                                    <FileText className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+                                    <textarea value={formData.notes} onChange={(e) => setFormData({...formData, notes: e.target.value})} rows={2} placeholder="Add details..." className="flex-1 text-sm text-gray-800 font-medium outline-none resize-none placeholder-gray-400 placeholder:font-normal bg-transparent" />
+                                </div>
+
+                                {editId && (
+                                    <div className="mb-4 relative">
+                                        <label className="block text-[11px] font-bold text-[#9D0052] uppercase tracking-widest mb-1">Reason for Edit *</label>
+                                        
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsReasonDropdownOpen(!isReasonDropdownOpen)}
+                                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 flex items-center justify-between bg-pink-50/20 focus:border-[#9D0052] text-sm font-semibold text-gray-900"
+                                        >
+                                            <span className={formData.reason ? "text-gray-900" : "text-gray-400"}>
+                                                {formData.reason || "Select reason..."}
+                                            </span>
+                                            <ChevronDown className={`w-4 h-4 text-[#9D0052] shrink-0 transition-transform ${isReasonDropdownOpen ? 'rotate-180' : ''}`} />
+                                        </button>
+
+                                        {isReasonDropdownOpen && (
+                                            <div className="absolute bottom-full left-0 mb-1.5 z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto py-1">
+                                                {EDIT_REASONS.map((r) => (
+                                                    <button
+                                                        key={r}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setFormData({ ...formData, reason: r });
+                                                            setIsReasonDropdownOpen(false);
+                                                        }}
+                                                        className={`block w-full text-left px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                                                            formData.reason === r ? 'bg-pink-50 text-[#9D0052] font-bold' : 'text-gray-700 hover:bg-gray-50'
+                                                        }`}
+                                                    >
+                                                        {r}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </form>
+                        </div>
+
+                        <button type="submit" form="workerLedgerForm" disabled={isSaving} className="w-full bg-[#9D0052] text-white text-sm font-bold rounded-xl py-3.5 tracking-wider uppercase transition-all active:scale-[0.99] shrink-0 mt-1">
+                            {isSaving ? "SAVING..." : editId ? "SAVE CHANGES" : "SAVE ADVANCE"}
+                        </button>
+                    </div>
+                </div>
+            )}
+        </main>
+    );
+};
+
+export default WorkerLedger;
+</file>
+
+<file path="package.json">
+{
+  "name": "expenseengine-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@capacitor-community/contacts": "^8.0.0",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "axios": "^1.19.0",
+    "date-fns": "^4.4.0",
+    "dayjs": "^1.11.21",
+    "firebase": "^12.17.1",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
+    "lucide-react": "^1.31.0",
+    "react": "^19.2.8",
+    "react-day-picker": "^10.0.1",
+    "react-dom": "^19.2.8",
+    "react-hot-toast": "^2.6.0",
+    "react-router-dom": "^7.18.2",
+    "swr": "^2.5.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "autoprefixer": "^10.5.4",
+    "eslint": "^10.8.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.7.0",
+    "postcss": "^8.5.26",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.2.0"
+  }
+}
+</file>
+
+<file path="src/lib/api.js">
+import axios from "axios";
+import { auth } from "../firebase";
+
+const baseURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? `http://${window.location.hostname}:5000/api` : "");
+if (!baseURL) {
+  console.error("CRITICAL: VITE_API_URL environment variable is missing in production build!");
+}
+
+export const api = axios.create({
+  baseURL,
+  headers: { "Content-Type": "application/json" },
+});
+
+api.interceptors.request.use(
+  async (config) => {
+    if (auth.currentUser) {
+      const token = await auth.currentUser.getIdToken();
+      localStorage.setItem("authToken", token);
+      config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      const token = localStorage.getItem("authToken");
+      if (token) config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+export const fetcher = (url) => api.get(url).then(res => {
+  if (typeof res.data === "string") throw new Error("Bad API URL or HTML response received");
+  return res.data;
+});
 </file>
 
 <file path="src/pages/CashbookPage.jsx">
@@ -2295,6 +3388,7 @@ const CashbookPage = () => {
     const [bossFormData, setBossFormData] = useState({ amount: '', notes: '', transactionId: '', reason: '', paymentMethod: 'Cash'});
     const [isBossEditMode, setIsBossEditMode] = useState(false);
     const [showExportModal, setShowExportModal] = useState(false);
+    const [pendingUpiData, setPendingUpiData] = useState(null);
 
     const [isWaitingForUpi, setIsWaitingForUpi] = useState(false);
     
@@ -2388,62 +3482,89 @@ const CashbookPage = () => {
     }
 
     // Handle Worker Advance Submission (Moved from Dashboard!)
-    const handleSubmitAdvance = async (e) => {
-    e.preventDefault();
-    if(!selectedWorkerId){
-        toast.error("Please select a worker!");
-        return;
-    }
+   const handleSubmitAdvance = async (e) => {
+        e.preventDefault();
+        if(!selectedWorkerId){
+            toast.error("Please select a worker!");
+            return;
+        }
 
-    const amountNum = Number(advanceAmount);
-
-    // If Online is selected, launch GPay first!
-    if (advancePaymentMethod === 'Online' && !isWaitingForUpi) {
-        setIsWaitingForUpi(true);
+        const amountNum = Number(advanceAmount);
         const workerObj = workers.find(w => (w._id || w.id) === selectedWorkerId);
-        const note = advanceNotes || `Advance for ${workerObj?.name || 'Worker'}`;
+        const workerName = workerObj?.name || 'Worker';
+        const note = advanceNotes || `Advance for ${workerName}`;
 
-        triggerUpiPayment(amountNum, note);
-        toast("Complete payment in GPay. Tap Save again upon return to log.");
-        return;
-    }
+        // If Online is selected and we aren't already waiting for confirmation
+        if (advancePaymentMethod === 'Online' && !isWaitingForUpi) {
+            // Save payload data temporarily for the confirmation popup
+            setPendingUpiData({
+                entryType: "Advance",
+                workerId: selectedWorkerId,
+                amount: amountNum,
+                paymentMethod: "Online",
+                description: advanceNotes,
+                date: dayjs(`${entryDate}T${entryTime}`).toISOString(),
+                workerName: workerName
+            });
 
-    try {
-        setIsSubmittingPayment(true);
-        const payload = {
-            entryType: "Advance",
-            workerId: selectedWorkerId,
-            amount: amountNum,
-            paymentMethod: advancePaymentMethod,
-            description: advanceNotes,
-            date: dayjs(`${entryDate}T${entryTime}`).toISOString()
-        };
-        await api.post("/ledger", payload);
-        toast.success("Advance payment logged successfully!");
+            setIsWaitingForUpi(true);
+            triggerUpiPayment(amountNum, note);
+            return;
+        }
 
-        // Reset form and close modal
-        setSelectedWorkerId("");
-        setAdvanceAmount("");
-        setAdvanceNotes("");
-        setAdvancePaymentMethod("Cash");
-        setIsWaitingForUpi(false);
-        setShowWorkerModal(false);
+        // Standard save flow (for Cash, Check, or confirming Online)
+        try {
+            setIsSubmittingPayment(true);
+            const payload = pendingUpiData ? {
+                entryType: pendingUpiData.entryType,
+                workerId: pendingUpiData.workerId,
+                amount: pendingUpiData.amount,
+                paymentMethod: pendingUpiData.paymentMethod,
+                description: pendingUpiData.description,
+                date: pendingUpiData.date
+            } : {
+                entryType: "Advance",
+                workerId: selectedWorkerId,
+                amount: amountNum,
+                paymentMethod: advancePaymentMethod,
+                description: advanceNotes,
+                date: dayjs(`${entryDate}T${entryTime}`).toISOString()
+            };
 
-        mutate('/ledger');
-    } catch (error) {
-        console.error("Error logging advance:", error);
-        toast.error(error.response?.data?.message || "Failed to log advance payment.");
-    } finally {
-        setIsSubmittingPayment(false);
-        setIsWaitingForUpi(false);
-    }
-}
+            await api.post("/ledger", payload);
+            toast.success("Advance payment logged successfully! 🎉");
+
+            // Reset form and close modal
+            setSelectedWorkerId("");
+            setAdvanceAmount("");
+            setAdvanceNotes("");
+            setAdvancePaymentMethod("Cash");
+            setIsWaitingForUpi(false);
+            setPendingUpiData(null);
+            setShowWorkerModal(false);
+
+            mutate('/ledger');
+        } catch (error) {
+            console.error("Error logging advance:", error);
+            toast.error(error.response?.data?.message || "Failed to log advance payment.");
+        } finally {
+            setIsSubmittingPayment(false);
+            setIsWaitingForUpi(false);
+        }
+    };
 
 
     const triggerUpiPayment = (amount, note) => {
-    // Standard UPI Intent URI for mobile devices & APKs
-    const upiUrl = `upi://pay?pa=merchant@upi&pn=ExpenseEngine&am=${amount}&tn=${encodeURIComponent(note || 'Worker Advance')}&cu=INR`;
-    window.location.href = upiUrl;
+    // Find the selected worker object from your workers array
+        const workerObj = workers.find(w => (w._id || w.id) === selectedWorkerId);
+        
+        // Use their saved UPI ID, or fallback to phone@ybl if not set
+        const workerUpiId = workerObj?.upiId || (workerObj?.phoneNumber ? `${workerObj.phoneNumber}@ybl` : "merchant@upi");
+        const workerName = encodeURIComponent(workerObj?.name || 'Worker');
+
+        // 💡 Launches GPay/PhonePe directly with the worker's personal VPA and amount pre-filled!
+        const upiUrl = `upi://pay?pa=${workerUpiId}&pn=${workerName}&am=${amount}&tn=${encodeURIComponent(note || 'Worker Advance')}&cu=INR`;
+        window.location.href = upiUrl;
     };
 
     const handleBossSubmit = async (e) => {
@@ -3117,23 +4238,28 @@ return (
                         </div>
 
                     
-                        <button type="submit" form="unifiedForm" disabled={isSubmittingPayment} className={`w-full text-white text-sm font-bold rounded-xl py-3.5 tracking-wider uppercase transition-all active:scale-[0.99] disabled:opacity-70 ${
-                                showWorkerModal && advancePaymentMethod === 'Online' 
-                                    ? 'bg-[#1A73E8] hover:bg-[#1557B0]' 
-                                    : showWorkerModal 
-                                        ? 'bg-[#9D0052] hover:bg-[#800043]' 
-                                        : 'bg-[#0E793C] hover:bg-[#0A5C2D]'
-                            }`}>
-                                {isSubmittingPayment 
-                                    ? "SAVING..." 
-                                    : bossEditId 
-                                        ? "SAVE CHANGES" 
-                                        : showWorkerModal && advancePaymentMethod === 'Online' 
-                                            ? `PAY ₹${advanceAmount || 0} ON GPAY` 
+                                <button 
+                                    type="submit" 
+                                    form="unifiedForm" 
+                                    disabled={isSubmittingPayment} 
+                                    className={`w-full text-white text-sm font-bold rounded-xl py-3.5 tracking-wider uppercase transition-all active:scale-[0.99] disabled:opacity-70 ${
+                                        showWorkerModal && advancePaymentMethod === 'Online' 
+                                            ? 'bg-[#1A73E8] hover:bg-[#1557B0]' 
                                             : showWorkerModal 
-                                                ? "SAVE ADVANCE" 
-                                                : "SAVE DEPOSIT"}
-                            </button>
+                                                ? 'bg-[#9D0052] hover:bg-[#800043]' 
+                                                : 'bg-[#0E793C] hover:bg-[#0A5C2D]'
+                                    }`}
+                                >
+                                    {isSubmittingPayment 
+                                        ? "SAVING..." 
+                                        : bossEditId 
+                                            ? "SAVE CHANGES" 
+                                            : showWorkerModal && advancePaymentMethod === 'Online' 
+                                                ? `PAY ₹${advanceAmount || 0} ON GPAY` 
+                                                : showWorkerModal 
+                                                    ? "SAVE ADVANCE" 
+                                                    : "SAVE DEPOSIT"}
+                                </button>
                     </div>
                 </div>
             )}
@@ -3195,6 +4321,51 @@ return (
             )}
             {/* Only show BottomNav if NO modals are open */}
             {(!showWorkerModal && !showBossModal && !showExportModal) && <BottomNav />}
+
+            {/* 🌟 FULL-SCREEN BLURRED UPI PAYMENT CONFIRMATION POPUP */}
+            {isWaitingForUpi && pendingUpiData && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl p-6 relative animate-pop-in text-center space-y-4">
+                        
+                        <div className="w-12 h-12 bg-blue-50 text-[#1048A4] rounded-full flex items-center justify-center mx-auto text-xl font-bold">
+                            ₹
+                        </div>
+
+                        <div>
+                            <h2 className="text-base font-extrabold text-gray-900 tracking-tight">Payment Verification</h2>
+                            <p className="text-sm font-medium text-gray-600 mt-2 leading-relaxed">
+                                Did you successfully complete the payment of <span className="font-bold text-[#C0392B]">₹{pendingUpiData.amount}</span> to <span className="font-bold text-[#1048A4]">{pendingUpiData.workerName}</span> via GPay?
+                            </p>
+                        </div>
+
+                        <div className="flex gap-3 pt-2">
+                            {/* NO / CANCELED BUTTON */}
+                            <button 
+                                type="button"
+                                onClick={() => {
+                                    setIsWaitingForUpi(false);
+                                    setPendingUpiData(null);
+                                    toast("Payment cancelled. Returned to Cashbook.");
+                                }}
+                                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold py-3.5 rounded-xl transition active:scale-[0.98]"
+                            >
+                                No (Cancel)
+                            </button>
+                            
+                            {/* YES / CONFIRMED BUTTON */}
+                            <button 
+                                type="button"
+                                disabled={isSubmittingPayment}
+                                onClick={handleSubmitAdvance}
+                                className="flex-1 bg-[#0E793C] hover:bg-[#0A5C2D] text-white text-sm font-bold py-3.5 rounded-xl transition active:scale-[0.98] shadow-lg"
+                            >
+                                {isSubmittingPayment ? "LOGGING..." : "Yes (Add to Ledger)"}
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -3473,1029 +4644,6 @@ const hasUnsavedChanges = norm(originalStatuses) !== norm(workerStatuses);
 export default Dashboard;
 </file>
 
-<file path="src/pages/Expenses.jsx">
-import React, { useEffect, useRef, useState } from 'react'
-import { api, fetcher } from '../lib/api';
-import toast from 'react-hot-toast';
-import BottomNav from '../components/BottomNav';
-import { ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  Search,
-  MoreVertical,
-  FileText,
-  X,
-  ChevronDown,
-  Calendar,
-  IndianRupee,
-  Package,
-  Plus,
-  FileSpreadsheet, 
-  Balloon,
-  Edit2} from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import dayjs from 'dayjs';
-import useSWR from 'swr';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
-
-
-
-  const CATEGORIES = ["Materials", "Transport", "Food", "Utilities", "Other"];
-  const CHIPS = ["All","Materials", "Transport", "Food", "Utilities", "Other"];
-  const EDIT_REASONS = ["Amount correction", "Category correction", "Date correction", "Payment method correction" ,"Duplicate entry", "Other"];
-
-  function ReportDocIcon ({ className = "w-5 h-5"}) {
-    return (
-      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="8" y1="13" x2="16" y2="13" />
-      <line x1="8" y1="17" x2="12" y2="17" />
-      <line x1="8" y1="9" x2="10" y2="9" />
-    </svg>
-    );
-  }
-
-
-export default function Expenses () {
-  const [currentMonth, setCurrentMonth] = useState(dayjs());
-  const navigate = useNavigate();
-  const location = useLocation();
-  const slideClass = location.state?.slideDirection === 'left' ? 'animate-slide-in-left' : location.state?.slideDirection === 'right' ? 'animate-slide-in-right' : 'animate-fade-in-fast'
-  // Data States
-  const [isSaving, setIsSaving] = useState(false);
-  
-  // UI States
-  const [uiState, setUiState] = useState("default");
-  const [chip, setChip] = useState("All");
-  const [searchQ, setSearchQ] = useState("");
-  const [showAdd, setShowAdd] = useState(false);
-
-  // Form States
-  const [fAmount, setFAmount] = useState("");
-  const [fCat, setFCat] = useState("Materials");
-  const [fPaymentMethod, setFPaymentMethod] = useState("Cash");
-  const [fDate, setFDate] = useState(dayjs().format('YYYY-MM-DD'));
-  const [fTime, setFTime] = useState(dayjs().format('HH:mm'));
-  const [fDesc, setFDesc] = useState("");
-
-  const searchRef = useRef(null);
-
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [editId, setEditId] = useState(null); 
-  const [fReason, setFReason] = useState(""); 
-  const [isReasonDropdownOpen, setIsReasonDropdownOpen] = useState(false);
-  const [isCatDropdownOpen, setIsCatDropdownOpen] = useState(false);
-
-  // ⚡ 1. SWR Instant Fetch (Grabs data and the mutate refresh tool)
-  const { data: rawLedgerData = [], isLoading, mutate } = useSWR('/ledger', fetcher);
-
-  // ⚡ 2. Instant Filtering (Sorts the cache instantly without states)
-  const expenses = rawLedgerData.filter(entry => entry.entryType === 'Expense');
-  const bossDeposits = rawLedgerData.filter(entry => entry.entryType === 'BossDeposit');
-  const workerAdvances = rawLedgerData.filter(entry => entry.entryType === 'Advance');
-
-  // Handle Saving New Expense to MongoDB
-const handleSave = async () => {
-    if(!fAmount || isNaN(Number(fAmount)) || Number(fAmount) <= 0) return;
-    
-    if(editId && !fReason) {
-      toast.error("Reason for Edit is required!");
-      return;
-    }
-
-    try {
-      setIsSaving(true);
-      const dateObj = new Date(`${fDate}T${fTime}:00`);
-
-      const payload = {
-        amount: Number(fAmount),
-        category: fCat,
-        paymentMethod: fPaymentMethod,
-        description: fDesc,
-        date: dateObj.toISOString()
-      };
-
-      if (editId) {
-        payload.isEdited = true;
-        payload.editReason = fReason;
-        await api.put(`/ledger/${editId}`, payload);
-        toast.success("Transaction updated!");
-      } else {
-        payload.entryType = "Expense";
-        await api.post('/ledger', payload);
-        toast.success("Expense logged!");
-      }
-
-      setFAmount(""); setFCat("Materials"); setFPaymentMethod("Cash"); setFDesc(""); setFReason(""); setEditId(null);
-      setShowAdd(false);
-      setIsEditMode(false);
-      mutate();
-    } catch (error) {
-      console.error("Error saving:", error);
-      toast.error("Failed to save transaction");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // ─── Open Edit Modal Helper ────────────────────────────────
-  const openEditModal = (row) => {
-    setEditId(row._id);
-    setFAmount(row.amount.toString());
-    setFCat(row.category);
-    setFPaymentMethod(row.paymentMethod || "Cash");
-    setFDate(dayjs(row.date).format('YYYY-MM-DD'));
-    setFTime(dayjs(row.date).format('HH:mm'));
-    setFDesc(row.description || "");
-    setFReason(row.editReason || ""); 
-    setShowAdd(true); // Opens the main modal
-  };
-
-  // Dynamic Calculations
-  const monthlyExpenses = expenses.filter(e => dayjs(e.date).isSame(currentMonth, 'month')).reduce((sum, e) => sum + e.amount, 0);
-  const monthlyDeposits = bossDeposits.filter(e => dayjs(e.date).isSame(currentMonth, 'month')).reduce((sum, d) => sum + d.amount, 0);
-  const monthlyAdvances = workerAdvances.filter(e => dayjs(e.date).isSame(currentMonth, 'month')).reduce((sum, a) => sum + a.amount, 0);
-
-  const currentBalance = monthlyDeposits - (monthlyExpenses + monthlyAdvances);
-
-  // 1. All expenses for the selected month
-  const currentMonthExpenses = expenses.filter((e) => dayjs(e.date).isSame(currentMonth, 'month'));
-
-  // 2. Filtered expenses for total display when searching/filtering
-  const filteredExpenses = currentMonthExpenses.filter((e) => {
-    if (uiState === 'search') {
-      const matchesSearch = searchQ.trim() === "" || 
-        (e.category && e.category.toLowerCase().includes(searchQ.toLowerCase())) ||
-        (e.description && e.description.toLowerCase().includes(searchQ.toLowerCase()));
-      const matchesChip = chip === "All" || e.category === chip;
-      return matchesSearch && matchesChip;
-    }
-    return true;
-  });
-
-  // Calculate dynamic date string for the UI slider
-  const dateDisplay = `${currentMonth.startOf('month').format('DD-MMM-YYYY')} to ${currentMonth.endOf('month').format('DD-MMM-YYYY')}`;
-  
-  // Calculate the total ONLY for the filtered items shown on screen
-  const filteredTotal = filteredExpenses.reduce((s, e) => s + e.amount, 0);
-  
-  // Build Chronological Ledger for UI (Compute true running balance on ALL month expenses first!)
-  const buildLedger = () => {
-    const sorted = [...currentMonthExpenses].sort((a, b) => new Date(a.date) - new Date(b.date));
-    let running = monthlyDeposits - monthlyAdvances;
-    
-    const allRowsWithBalance = sorted.map((e) => {
-      running -= e.amount;
-      return { 
-        ...e, 
-        balance: running, 
-        dateKey: dayjs(e.date).format('YYYY-MM-DD'),
-        timeDisplay: new Date(e.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-      };
-    });
-
-    // Now apply search/chip filter if in search mode so running balances stay 100% accurate
-    const visibleRows = uiState === 'search'
-      ? allRowsWithBalance.filter((e) => {
-          const matchesSearch = searchQ.trim() === "" || 
-            (e.category && e.category.toLowerCase().includes(searchQ.toLowerCase())) ||
-            (e.description && e.description.toLowerCase().includes(searchQ.toLowerCase()));
-          const matchesChip = chip === "All" || e.category === chip;
-          return matchesSearch && matchesChip;
-        })
-      : allRowsWithBalance;
-
-    const byDate = {};
-    visibleRows.forEach((r) => (byDate[r.dateKey] = byDate[r.dateKey] || []).push(r));
-    
-    return Object.keys(byDate).sort().reverse().map((dk) => ({ dk, rows: byDate[dk].reverse() }));
-  };
-
-  const ledger = buildLedger();
-
-
-  // ─── EXCEL (CSV) EXPORT ─────────────────────────────────────────────
-  const handleExportExcel = () => {
-    // Create Headers
-    let csvContent = "Date,Time,Category,Description,Amount (INR),Balance (INR)\n";
-
-    // Loop through your chronological ledger and build the rows
-    [...ledger].reverse().forEach(({ dk, rows}) => {
-      [...rows].reverse().forEach(row => {
-        const method = row.paymentMethod || "Cash";
-        let finalDesc = `${row.description || "-"} [${method}]`;
-        if(row.isEdited){
-          finalDesc += ` (EDITED: ${row.editReason})`;
-        }
-        const safeDesc = `"${finalDesc.replace(/"/g, '""')}"`;
-        csvContent += `${dayjs(dk).format('DD-MMM-YYYY')},${row.timeDisplay},${row.category},${safeDesc},${row.amount},${row.balance}\n`;
-      });
-    });
-
-    // Trigger Download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Site_Expenses_${currentMonth.format('MMM_YYYY')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    setUiState("default");
-    toast.success(" Excel downloaded! ");
-  }
-
-
-  // ─── PDF EXPORT ────────────────────────────────────────
-  const handleExportPDF = () => {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-
-    // Header
-    doc.setFontSize(18);
-    doc.setTextColor(157, 0, 82)
-    doc.text("Site Expense Report", 14, 20);
-
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(`Billing Period: ${dateDisplay}`, 14, 28);
-
-    // Summary Box
-    doc.setFontSize(10);
-    doc.setTextColor(0);
-    doc.text(`Total Spent: Rs. ${monthlyExpenses.toLocaleString("en-IN")}`, 14, 38);
-    doc.text(`Final Balance: Rs. ${currentBalance.toLocaleString("en-IN")}`, pageWidth - 14, 38, { align: "right" });
-
-    // Format the table data
-    const tableRows = [];
-    [...ledger].reverse().forEach(({ dk, rows}) => {
-      [...rows].reverse().forEach(row => {
-        const method = row.paymentMethod || "Cash";
-        let finalDesc = `${row.description || "-"} [${method}]`;
-        if (row.isEdited) {
-          finalDesc += `\n(Edited: ${row.editReason})`;
-        }
-
-        tableRows.push([
-          dayjs(dk).format('DD-MMM-YYYY'),
-          row.category,
-          finalDesc,
-          `Rs. ${row.amount.toLocaleString("en-IN")}`,
-          `Rs. ${row.balance.toLocaleString("en-IN")}`
-        ]);
-      });
-    });
-
-    // Generate the Table
-    autoTable(doc,{
-      startY: 45,
-      head: [['Date', 'Category', 'Description', 'Amount', 'Balance']],
-      body: tableRows,
-      theme: 'striped',
-      headStyles: { fillColor: [157, 0, 82] },
-      styles: { fontSize: 9 },
-      columnStyles: {
-        3: { halign: 'right', textColor: [192, 57, 43] },
-        4: { halign: 'right', fontStyle: 'bold' } 
-      }
-    });
-
-    // Download
-    doc.save(`Site_Expenses_${currentMonth.format('MMM_YYYY')}.pdf`);
-    
-    setUiState("default"); // Close the modal
-    toast.success("PDF downloaded!");
-  }
-
-
-  // ─── Floating Action Button ────────────────────────────────────────────────
-  const FAB = () => (
-    <button
-      onClick={() => {
-        setEditId(null); 
-        setFAmount(""); setFCat("Materials"); setFPaymentMethod("Cash"); setFDesc(""); setFReason("");
-        setFDate(dayjs().format('YYYY-MM-DD'));
-        setFTime(dayjs().format('HH:mm'));
-        setShowAdd(true);
-      }}
-      className="fixed z-20 flex items-center gap-1.5 font-bold text-white text-[13px] tracking-wide bg-[#9D0052]"
-      style={{ bottom: 84, right: 16, borderRadius: 999, padding: "11px 18px", boxShadow: "0 3px 10px rgba(157,0,82,0.45)" }}
-    >
-      <Plus className="w-4 h-4" />
-      LOG EXPENSE
-    </button>
-  );
-
-// ─── Unified Add/Edit Expense Modal ───────────────────────────────────────
-  const renderAddModal = () => (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end max-w-md mx-auto">
-      <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={() => { setShowAdd(false); setEditId(null); }} />
-      <div className="relative bg-white rounded-t-2xl px-5 pt-4 pb-8 animate-slide-up-bottom" style={{ boxShadow: "0 -4px 24px rgba(0,0,0,0.12)" }}>
-        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
-        <div className="flex items-center justify-between mb-4">
-          
-          {/* 1. DYNAMIC TITLE */}
-          <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
-            {editId ? "Edit Transaction" : "Log New Expense"}
-          </h2>
-          
-          <button onClick={() => { setShowAdd(false); setEditId(null); }} className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center">
-            <X className="w-3.5 h-3.5 text-gray-500" />
-          </button>
-        </div>
-
-        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Amount (₹)</label>
-        <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 mb-3 focus-within:border-[#9D0052]">
-          <IndianRupee className="w-5 h-5 text-[#9D0052] shrink-0" />
-          <input type="number" placeholder="0" value={fAmount} onChange={(e) => setFAmount(e.target.value)} className="flex-1 text-2xl font-extrabold text-gray-900 outline-none placeholder-gray-300 bg-transparent w-full" />
-        </div>
-
-        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Payment Method</label>
-        <div className="flex gap-2 mb-3">
-          {['Cash', 'Online', 'Check', 'Other'].map((method) => (
-            <button
-              key={method}
-              type="button"
-              onClick={() => setFPaymentMethod(method)}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-colors ${fPaymentMethod === method ? 'bg-[#9D0052] border-[#9D0052] text-white' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}
-            >
-              {method}
-            </button>
-          ))}
-        </div>
-
-        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Category</label>
-        <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 mb-3 focus-within:border-[#9D0052]">
-          <Package className="w-4 h-4 text-gray-400 shrink-0" />
-          <select value={fCat} onChange={(e) => setFCat(e.target.value)} className="flex-1 text-sm font-semibold text-gray-800 outline-none appearance-none bg-transparent">
-            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
-        </div>
-
-        <div className="flex gap-2 mb-3">
-          <div className="flex-1">
-            <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Date</label>
-            <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 focus-within:border-[#9D0052]">
-              <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
-              <input type="date" value={fDate} onChange={(e) => setFDate(e.target.value)} className="flex-1 text-sm font-semibold text-gray-800 outline-none bg-transparent min-w-0" />
-            </div>
-          </div>
-          <div className="w-32">
-            <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Time</label>
-            <div className="border border-gray-200 rounded-lg px-3 py-2.5 focus-within:border-[#9D0052]">
-              <input type="time" value={fTime} onChange={(e) => setFTime(e.target.value)} className="w-full text-sm font-semibold text-gray-800 outline-none bg-transparent" />
-            </div>
-          </div>
-        </div>
-
-        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Description / Notes</label>
-        <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-start gap-2 mb-5 focus-within:border-[#9D0052]">
-          <FileText className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
-          <textarea placeholder="e.g. 50 bags of cement" value={fDesc} onChange={(e) => setFDesc(e.target.value)} rows={2} className="flex-1 text-sm text-gray-800 outline-none resize-none placeholder-gray-400 bg-transparent" />
-        </div>
-
-        {/* 2. DYNAMIC REASON DROPDOWN (ONLY SHOWS IF EDITING) */}
-        {editId && (
-          <div className="mb-5 relative">
-            <label className="block text-[11px] font-bold text-[#9D0052] uppercase tracking-widest mb-1">Reason for Edit *</label>
-            <button
-              type="button"
-              onClick={() => {
-                setIsReasonDropdownOpen(!isReasonDropdownOpen);
-                setIsCatDropdownOpen(false);
-              }}
-              className="w-full border-2 border-[#9D0052]/20 rounded-lg px-3 py-2.5 flex items-center justify-between bg-pink-50/30 focus:border-[#9D0052] text-sm font-semibold text-gray-900"
-            >
-              <span className={fReason ? "text-gray-900" : "text-gray-400"}>
-                {fReason || "Select a reason..."}
-              </span>
-              <ChevronDown className={`w-4 h-4 text-[#9D0052] shrink-0 transition-transform ${isReasonDropdownOpen ? 'rotate-180' : ''}`} />
-            </button>
-
-            {isReasonDropdownOpen && (
-              <div className="absolute bottom-full left-0 mb-1.5 z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto py-1">
-                {EDIT_REASONS.map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => {
-                      setFReason(r);
-                      setIsReasonDropdownOpen(false);
-                    }}
-                    className={`block w-full text-left px-3.5 py-2.5 text-sm font-medium transition-colors ${
-                      fReason === r ? 'bg-pink-50 text-[#9D0052] font-bold' : 'text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 3. DYNAMIC SUBMIT BUTTON */}
-        <button disabled={isSaving} onClick={handleSave} className="w-full bg-[#9D0052] hover:bg-[#800043] active:scale-[0.99] text-white text-sm font-bold rounded-xl py-3.5 tracking-wider uppercase transition-all disabled:opacity-70">
-          {isSaving ? "SAVING..." : editId ? "SAVE CHANGES" : "SAVE EXPENSE"}
-        </button>
-        
-      </div>
-    </div>
-  );
-
-
-  // ─── Ledger Body (Shared List) ─────────────────────────────────────────────
-  const renderLedgerBody = () => (
-    <>
-      <div className="flex items-center bg-gray-100 border-b border-gray-300 px-4 py-2 shrink-0">
-        <span className="flex-1 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Date</span>
-        <span className="text-[11px] font-bold text-[#C0392B] uppercase tracking-wider">Cash Out</span>
-      </div>
-
-      <div className="pb-10">
-        {isLoading ? (
-            <p className="p-8 text-center text-sm text-gray-400 font-medium">Loading ledger...</p>
-        ) : ledger.length === 0 ? (
-            <p className="p-8 text-center text-sm text-gray-400 font-medium">No expenses logged yet.</p>
-        ) : ledger.map(({ dk, rows }) => (
-          <div key={dk}>
-            <div className="flex items-center justify-between bg-gray-50 border-b border-gray-200 px-4 py-1.5">
-              <span className="text-[12px] font-bold text-gray-600">{dayjs(dk).format('ddd, DD MMM YYYY')}</span>
-              <span className="text-[11px] font-semibold text-gray-400 tabular-nums">
-                ₹{rows.reduce((s, r) => s + r.amount, 0).toLocaleString("en-IN")}
-              </span>
-            </div>
-            {rows.map((row) => (
-              <div key={row._id} className={`flex items-start px-4 py-2.5 border-b border-gray-100 ${row.isEdited ? 'bg-amber-50/30' : ''}`}>
-                <div className="flex-1 min-w-0 pr-2">
-                  <div className="flex items-center gap-2">
-                    <p className="text-[13px] font-semibold text-gray-900 leading-tight">{row.category}</p>
-                    {row.isEdited && (
-                      <span className="text-[8px] font-bold text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded uppercase tracking-wider">
-                        Edited
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                    <p className="text-[11px] text-gray-400">
-                      {row.timeDisplay} {row.description ? `· ${row.description}` : ''}
-                    </p>
-                    <span className="rounded bg-pink-50 border border-[#9D0052]/20 px-1.5 py-0.5 text-[8px] font-extrabold text-[#9D0052] uppercase leading-none">
-                      {row.paymentMethod || 'Cash'}
-                    </span>
-                  </div>
-                  {row.isEdited && (
-                    <p className="text-[10px] text-amber-600 mt-0.5 italic">Reason: {row.editReason}</p>
-                  )}
-                </div>
-                
-                <div className="text-right shrink-0 flex items-center gap-3">
-                  <div>
-                    <p className="text-[14px] font-extrabold text-[#C0392B] leading-tight tabular-nums">
-                      {row.amount.toLocaleString("en-IN")}
-                    </p>
-                    <p className="text-[11px] text-gray-400 mt-0.5 tabular-nums">
-                      Bal {row.balance >= 0 ? "" : "-"}₹{Math.abs(row.balance).toLocaleString("en-IN")}
-                    </p>
-                  </div>
-                  
-                  {isEditMode && (
-                    <button onClick={() => openEditModal(row)} className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 text-gray-600 transition">
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        ))}
-
-        <div className="flex items-center justify-between px-4 py-3 border-t-2 border-gray-400 bg-gray-50">
-          <span className="text-[12px] font-bold text-gray-700 uppercase tracking-wide">Total Expenses</span>
-          <span className="text-[14px] font-extrabold text-[#C0392B] tabular-nums">
-            ₹{filteredTotal.toLocaleString("en-IN")}
-          </span>
-        </div>
-      </div>
-    </>
-  );
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // STATE 1: Default & Report Modal
-  // ════════════════════════════════════════════════════════════════════════════
-  if(uiState === "default" || uiState === "report") return (
-    <div className={`fixed inset-0 flex flex-col bg-white overflow-hidden max-w-md mx-auto font-sans ${slideClass}`}>
-
-      {/* ENTIRE SCROLLABLE PAGE CONTENT */}
-      <div className="flex-1 overflow-y-auto pb-24" style={{ scrollbarWidth: 'none' }}>
-          {/* Maroon App Bar */}
-      <div className='bg-[#9D0052] pt-6 pb-0'>
-        <div className='flex items-center gap-2 pb-3 px-4'>
-          <button onClick={() => navigate('/cashbook')} className='text-white p-1'><ArrowLeft className='w-5 h-5'/></button>
-          <span className="text-white text-[15px] font-bold tracking-tight flex-1">Site Expenses</span>
-          <button className='text-white p-1.5'
-          onClick={() => setUiState("report")}>
-            <ReportDocIcon className="w-5 h-5"/>
-          </button>
-          {/* SEARCH BUTTON */}
-          <button className='text-white p-1.5' onClick={() => { setUiState("search"); setTimeout(() => searchRef.current?.focus(), 50); }}>
-            <Search className="w-5 h-5" />
-          </button>
-          <button 
-          onClick={() => setIsEditMode(!isEditMode)}
-          className= {`p-1.5 rounded-full transition-colors ${isEditMode ? 'bg-white text-[#9D0052]' : 'text-white'}`}><MoreVertical className='w-5 h-5'/></button>
-        </div>
-
-        {/* Summary Card */}
-        <div className='bg-white overflow-hidden mx-4' style={{ borderRadius: 14 }}>
-          <div className='flex'>
-            <div className='flex-1 px-4 py-2.5 text-center'>
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Total Spent</p>
-              <p className="text-[20px] font-extrabold text-[#C0392B] tabular-nums leading-none">
-                ₹{monthlyExpenses.toLocaleString("en-IN")}
-              </p>
-            </div>
-
-            <div className='w-px bg-gray-200 my-2.5'/>
-            <div className='flex-1 px-4 py-2.5 text-center'>
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Balance</p>
-              <p className={`text-[20px] font-extrabold tabular-nums leading-none ${currentBalance < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                ₹{currentBalance.toLocaleString("en-IN")}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Date nav strip */}
-        <div className='flex items-center justify-between bg-[#7B0040] px-3 py-2 mt-4'>
-          <button onClick ={() => setCurrentMonth(prev => prev.subtract(1, 'month'))}className="text-white/70 p-1"><ChevronLeft className="w-4 h-4" /></button>
-          <span className="text-white text-[12px] font-semibold tracking-wide">{dateDisplay}</span>
-          <button onClick={() => setCurrentMonth(prev => prev.add(1, 'month'))} className="text-white/70 p-1"><ChevronRight className="w-4 h-4" /></button>
-        </div>
-      </div>
-
-      {renderLedgerBody()}
-      </div>
-      <FAB/>
-      <BottomNav/>
-      {showAdd && renderAddModal()}
-
-
-      {/* Report Modal */}
-      {uiState === "report" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center max-w-md mx-auto">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setUiState("default")} />
-          <div className="relative bg-white rounded-2xl w-64 overflow-hidden shadow-2xl">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              <span className="text-[14px] font-bold text-gray-900">Report</span>
-              <button onClick={() => setUiState("default")} className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100">
-                <X className="w-3.5 h-3.5 text-gray-500" />
-              </button>
-            </div>
-            <button onClick={handleExportPDF} className="w-full flex items-center gap-3 px-4 py-4 hover:bg-gray-50 transition-colors">
-              <div className="w-9 h-9 bg-red-50 rounded-lg flex items-center justify-center shrink-0">
-                <ReportDocIcon className="w-5 h-5 text-red-600" />
-              </div>
-              <span className="text-[14px] font-semibold text-gray-800">PDF</span>
-            </button>
-            <div className="h-px bg-gray-100 mx-4" />
-            <button onClick={handleExportExcel} className="w-full flex items-center gap-3 px-4 py-4 hover:bg-gray-50 transition-colors">
-              <div className="w-9 h-9 bg-green-50 rounded-lg flex items-center justify-center shrink-0">
-                <FileSpreadsheet className="w-5 h-5 text-green-600" />
-              </div>
-              <span className="text-[14px] font-semibold text-gray-800">Excel</span>
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // STATE 2: Search View
-  // ════════════════════════════════════════════════════════════════════════════
-
-
-  return (
-    <div className={`fixed inset-0 flex flex-col bg-white overflow-hidden max-w-md mx-auto font-sans ${slideClass}`}>
-      
-      {/* ENTIRE SCROLLABLE PAGE CONTENT */}
-      <div className="flex-1 overflow-y-auto pb-24" style={{ scrollbarWidth: 'none' }}>
-          <div className="bg-white border-b border-gray-200 flex items-center gap-2 px-3 pt-6 pb-3">
-        <button onClick={() => { setUiState("default"); setSearchQ(""); }} className="text-gray-600 p-1">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <Search className="w-4 h-4 text-gray-400 shrink-0" />
-        <input
-          ref={searchRef}
-          type="text"
-          placeholder="Search categories or notes..."
-          value={searchQ}
-          onChange={(e) => setSearchQ(e.target.value)}
-          className="flex-1 text-[15px] text-gray-900 outline-none placeholder-gray-400 bg-transparent"
-        />
-        <button className="text-gray-600 p-1" onClick={() => setUiState("report")}>
-          <ReportDocIcon className="w-5 h-5" />
-        </button>
-        <button onClick={() => setIsEditMode(!isEditMode)} className="text-gray-600 p-1 "><MoreVertical className="w-5 h-5" /></button>
-      </div>
-
-      <div className="bg-[#9D0052] flex gap-2 px-4 py-2.5 overflow-x-auto shrink-0" style={{ scrollbarWidth: "none" }}>
-        {CHIPS.map((c) => {
-          const active = chip === c;
-          return (
-            <button
-              key={c}
-              onClick={() => setChip(c)}
-              className="shrink-0 text-[12px] font-semibold px-4 py-1.5 transition-all"
-              style={{
-                borderRadius: 999,
-                border: active ? "2px solid #ffffff" : "2px solid rgba(255,255,255,0.35)",
-                background: active ? "rgba(255,255,255,0.18)" : "transparent",
-                color: active ? "#ffffff" : "rgba(255,255,255,0.65)",
-              }}
-            >
-              {c}
-            </button>
-          );
-        })}
-      </div>
-
-      {renderLedgerBody()}
-      </div>
-      <FAB />
-      <BottomNav />
-      {showAdd && renderAddModal()}
-    </div>
-  )
-}
-</file>
-
-<file path="src/pages/WorkerLedger.jsx">
-import React, { useState, useMemo } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import useSWR, { mutate } from 'swr';
-import { api, fetcher } from '../lib/api';
-import dayjs from 'dayjs';
-import toast from 'react-hot-toast';
-import { ArrowLeft, Pencil, ChevronDown, Plus, X, Calendar, Clock3, IndianRupee, FileText } from 'lucide-react';
-
-const WorkerLedger = () => {
-    const { id } = useParams();
-    const navigate = useNavigate();
-    const location = useLocation();
-    
-    // SWR Fetchers placed at the top
-    const { data: workerData } = useSWR(`/workers/${id}`, fetcher);
-    const { data: ledgerHistory = [], isLoading } = useSWR(`/ledger/worker/${id}`, fetcher);
-    
-    // Grab data safely after fetchers
-    const workerName = workerData?.name || location.state?.workerName || "Worker";
-    const isActive = workerData ? workerData.isActive !== false : location.state?.isActive !== false;
-
-    // UI States
-    const [profilePeriod, setProfilePeriod] = useState(dayjs().format('MMM YYYY'));
-    const [isEditMode, setIsEditMode] = useState(false);
-    
-    // Edit Modal States
-    const [showModal, setShowModal] = useState(false);
-    const [editId, setEditId] = useState(null);
-    const [formData, setFormData] = useState({ amount: '', notes: '', reason: '', paymentMethod: 'Cash' });
-    const [isSaving, setIsSaving] = useState(false);
-    const EDIT_REASONS = ["Amount correction", "Date correction", "Payment method correction" ,"Duplicate entry", "Other"];
-    const [isReasonDropdownOpen, setIsReasonDropdownOpen] = useState(false);
-    const [entryDate, setEntryDate] = useState(dayjs().format('YYYY-MM-DD'));
-    const [entryTime, setEntryTime] = useState(dayjs().format('HH:mm'));
-    // 🚨 BUG FIX 1: Ensure ledgerHistory is always treated as an array so .filter() doesn't crash
-    const safeHistory = Array.isArray(ledgerHistory) ? ledgerHistory : [];
-
-    // Filter math for the selected month
-    // 🚨 BUG FIX: Safe Filter Math for the selected month
-    const visibleEntries = safeHistory.filter(entry => {
-        // Fallback to createdAt if date is missing
-        const recordDate = entry.date || entry.createdAt; 
-        if (!recordDate) return false;
-        
-        // Convert the database date to match the "MMM YYYY" dropdown exactly
-        const entryMonthYear = dayjs(recordDate).format('MMM YYYY');
-        return entryMonthYear === profilePeriod;
-    });
-
-    const periodTotal = visibleEntries.reduce((sum, e) => sum + e.amount, 0);
-    const totalAdvance = safeHistory.reduce((sum, e) => sum + e.amount, 0);
-    // 🚨 BUG FIX 2: Use dayjs to generate the dropdown options so they match the filter perfectly
-    const monthOptions = useMemo(() => {
-        return Array.from({ length: 12 }).map((_, i) => 
-            dayjs().subtract(i, 'month').format('MMM YYYY')
-        );
-    }, []);
-
-    const formatMoney = (amount) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(amount);
-
-    // Unified Handle Save (Add & Edit)
-    const handleSave = async (e) => {
-        e.preventDefault();
-        if (!formData.amount) return toast.error("Amount required!");
-        if (editId && !formData.reason) return toast.error("Reason for Edit is required!");
-
-        try {
-            setIsSaving(true);
-            const payload = {
-                amount: Number(formData.amount),
-                paymentMethod: formData.paymentMethod || "Cash",
-                description: formData.notes,
-                date: dayjs(`${entryDate}T${entryTime}`).toISOString()
-            };
-
-            if (editId) {
-                payload.isEdited = true;
-                payload.editReason = formData.reason;
-                await api.put(`/ledger/${editId}`, payload);
-                toast.success("Transaction updated!");
-            } else {
-                payload.entryType = "Advance";
-                payload.workerId = id;
-                await api.post('/ledger', payload);
-                toast.success("Advance logged!");
-            }
-
-            setShowModal(false);
-            setEditId(null);
-            setFormData({ amount: '', notes: '', reason: '', paymentMethod: 'Cash' });
-            
-            // Instantly refresh this page AND the cashbook cache
-            mutate(`/ledger/worker/${id}`);
-            mutate('/ledger'); 
-        } catch (error) {
-            toast.error("Failed to save.");
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    const openEditModal = (entry) => {
-
-        setEntryDate(dayjs(entry.date).format('YYYY-MM-DD'));
-        setEntryTime(dayjs(entry.date).format('HH:mm'));
-        setEditId(entry._id);
-        setFormData({ 
-            amount: entry.amount.toString(), 
-            notes: entry.description || "", 
-            reason: entry.editReason || "",
-            paymentMethod: entry.paymentMethod || "Cash"
-        });
-        setShowModal(true);
-    };
-
-    return (
-        <main className="fixed inset-0 flex flex-col bg-[#F9FAFB] max-w-md mx-auto overflow-hidden animate-slide-in-right font-sans">
-            
-            {/* 1. BLUE HEADER */}
-            <header className="bg-[#1048A4] px-4 pb-12 pt-4 text-white">
-                <div className="flex items-center gap-3">
-                    <button onClick={() => navigate(-1)} className="flex h-10 w-10 shrink-0 items-center justify-center active:scale-95 transition">
-                        <ArrowLeft className="h-6 w-6" />
-                    </button>
-                    <div className="flex min-w-0 flex-1 items-center gap-3">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 text-lg font-bold">
-                            {workerName.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                            <p className="truncate text-[17px] font-semibold leading-tight">{workerName}</p>
-                            <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-200 mt-0.5">
-                                {isActive ? "Active worker" : "Inactive worker"}
-                            </p>
-                        </div>
-                    </div>
-                    {/* Pencil Edit Button */}
-                    {isActive && (
-                      <button onClick={() => setIsEditMode(!isEditMode)} className={`flex h-10 w-10 items-center justify-center rounded-full transition active:scale-95 ${isEditMode ? "bg-white text-[#1048A4]" : "text-white bg-white/10"}`}>
-                          <Pencil className="h-4 w-4" />
-                      </button>
-                  )}
-                </div>
-            </header>
-
-          {/* 2. OVERLAPPING SUMMARY CARD (Fixed Balance Display) */}
-            <section className="-mt-10 px-4 relative z-10">
-                <div className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-xl">
-                    <div className="flex items-end justify-between">
-                        <div>
-                            <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-500">Advance this month</p>
-                            {/* Make the active period total the large red number */}
-                            <p className="mt-1 text-[26px] font-bold text-[#C0392B]">₹{formatMoney(periodTotal)}</p>
-                        </div>
-                        <div className="text-right border-l border-gray-200 pl-4">
-                            <p className="text-[9px] font-bold uppercase text-gray-400 mb-0.5">LIFETIME</p>
-                            {/* Show the lifetime total as the secondary metric */}
-                            <p className={`text-sm font-extrabold ${totalAdvance > 0 ? 'text-[#C0392B]' : 'text-gray-800'}`}>₹{formatMoney(totalAdvance)}</p>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* 3. FILTER BAR */}
-            <section className="flex items-center justify-between px-5 py-4 mt-2">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Transaction period</span>
-                <div className="flex h-9 items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 focus-within:border-[#1048A4] transition-colors">
-                    <select value={profilePeriod} onChange={(e) => setProfilePeriod(e.target.value)} className="appearance-none bg-transparent text-[13px] font-bold outline-none text-[#1048A4] cursor-pointer">
-                        {monthOptions.map(m => <option key={m}>{m}</option>)}
-                    </select>
-                    <ChevronDown className="h-3.5 w-3.5 text-[#1048A4] pointer-events-none" />
-                </div>
-            </section>
-
-            <div className="flex border-y border-gray-200 bg-gray-100 px-5 py-2">
-                <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">Entries</span>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Amount</span>
-            </div>
-
-            {/* 4. LEDGER LIST */}
-            <section className="flex-1 overflow-y-auto bg-white pb-28">
-                {isLoading ? (
-                    <p className="text-center text-gray-500 py-8 text-sm font-medium">Loading history...</p>
-                ) : visibleEntries.length > 0 ? (
-                    visibleEntries.map((entry) => (
-                        <div key={entry._id} className="border-b border-gray-100">
-                            <div className="flex items-start px-5 py-4">
-                                <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2">
-                                        <p className="text-[13px] font-bold text-gray-900">{dayjs(entry.date).format('DD MMM YY • hh:mm A')}</p>
-                                        {entry.isEdited && (
-                                            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[8px] font-extrabold text-amber-700">EDITED</span>
-                                        )}
-                                    </div>
-                                    <div className="mt-2 rounded-md bg-gray-50 border border-gray-200 p-2 mr-4 flex items-center justify-between gap-2">
-                                        <p className="text-[12px] text-gray-600 leading-snug font-medium wrap-break">
-                                            {entry.description || "Advance"}
-                                        </p>
-                                        <span className="shrink-0 rounded bg-white border border-gray-200 px-1.5 py-0.5 text-[9px] font-extrabold text-[#9D0052] uppercase">
-                                            {entry.paymentMethod || "Cash"}
-                                        </span>
-                                    </div>
-                                    {entry.isEdited && entry.editReason && (
-                                        <p className="mt-1.5 text-[10px] font-bold text-amber-700">Reason: {entry.editReason}</p>
-                                    )}
-                                </div>
-                                <div className="ml-3 flex items-start gap-2">
-                                    <div className="rounded bg-red-50 px-2.5 py-1.5 border border-red-100">
-                                        <p className="text-[15px] font-bold tabular-nums text-[#C0392B]">₹{formatMoney(entry.amount)}</p>
-                                    </div>
-                                    {isEditMode && (
-                                        <button onClick={() => openEditModal(entry)} className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white shadow-sm text-gray-500 active:scale-95 transition mt-0.5">
-                                            <Pencil className="h-3.5 w-3.5" />
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    ))
-                ) : (
-                    <div className="px-4 py-12 text-center">
-                        <p className="text-gray-400 text-sm font-semibold">No transactions for {profilePeriod}</p>
-                    </div>
-                )}
-            </section>
-
-            {/* 5. FLOATING BOTTOM BUTTON */}
-            {isActive && (
-              <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 z-20 animate-slide-up-bottom">
-                  <button 
-                      onClick={() => { 
-                          setEditId(null); 
-                          setFormData({ amount: '', notes: '', reason: '', paymentMethod: 'Cash' }); 
-                          setEntryDate(dayjs().format('YYYY-MM-DD'));
-                          setEntryTime(dayjs().format('HH:mm'));
-                          setShowModal(true);
-                      }}
-                      className="w-full bg-[#9D0052] text-white font-bold text-[15px] tracking-wide py-3.5 rounded-xl shadow-lg active:scale-[0.98] transition flex justify-center items-center gap-2"
-                  >
-                      <Plus className="w-5 h-5" /> LOG ADVANCE
-                  </button>
-              </div>
-          )}
-
-            {/* 6. UNIFIED ADD/EDIT MODAL (True Bottom Sheet) */}
-            {showModal && (
-                <div className="fixed inset-0 z-50 flex flex-col justify-end max-w-md mx-auto">
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-fade-in" onClick={() => setShowModal(false)} />
-                    
-                    <div className="relative bg-white rounded-t-2xl shadow-[0_-4px_24px_rgba(0,0,0,0.12)] flex flex-col animate-slide-up-bottom px-5 pt-4 pb-8">
-                        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4 shrink-0" />
-                        
-                        <div className="flex items-center justify-between mb-4 shrink-0">
-                            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
-                                {editId ? "Edit Advance" : "Log Advance"}
-                            </h2>
-                            <button onClick={() => setShowModal(false)} className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center transition hover:bg-gray-200">
-                                <X className="w-3.5 h-3.5 text-gray-500" />
-                            </button>
-                        </div>
-
-                        <div className="overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
-                            <form id="workerLedgerForm" onSubmit={handleSave}>
-                                
-                                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Amount (₹)</label>
-                                <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 mb-3 focus-within:border-[#9D0052] transition-colors bg-white">
-                                    <IndianRupee className="w-5 h-5 text-[#9D0052] shrink-0" />
-                                    <input type="number" required value={formData.amount} onChange={(e) => setFormData({...formData, amount: e.target.value})} placeholder="0" className="flex-1 text-2xl font-bold text-gray-900 outline-none placeholder-gray-300 bg-transparent w-full" />
-                                </div>
-
-                                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Payment Method</label>
-                                <div className="flex gap-2 mb-3">
-                                    {['Cash', 'Online', 'Check', 'Other'].map((method) => {
-                                        const isSelected = (formData.paymentMethod || 'Cash') === method;
-                                        return (
-                                            <button
-                                                key={method}
-                                                type="button"
-                                                onClick={() => setFormData({ ...formData, paymentMethod: method })}
-                                                className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-colors ${isSelected ? 'bg-[#9D0052] border-[#9D0052] text-white' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}
-                                            >
-                                                {method}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-
-                                <div className="flex gap-2 mb-3">
-                                    <div className="flex-1">
-                                        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Date</label>
-                                        <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 focus-within:border-[#9D0052] bg-white">
-                                            <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
-                                            <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className="flex-1 text-[13px] font-semibold text-gray-800 outline-none bg-transparent min-w-0" />
-                                        </div>
-                                    </div>
-                                    <div className="w-32">
-                                        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Time</label>
-                                        <div className="border border-gray-200 rounded-lg px-3 py-2.5 focus-within:border-[#9D0052] bg-white flex items-center gap-1">
-                                            <input type="time" value={entryTime} onChange={(e) => setEntryTime(e.target.value)} className="w-full text-[13px] font-semibold text-gray-800 outline-none bg-transparent" />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Description / Notes</label>
-                                <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-start gap-2 mb-5 focus-within:border-[#9D0052] bg-white">
-                                    <FileText className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
-                                    <textarea value={formData.notes} onChange={(e) => setFormData({...formData, notes: e.target.value})} rows={2} placeholder="Add details..." className="flex-1 text-sm text-gray-800 font-medium outline-none resize-none placeholder-gray-400 placeholder:font-normal bg-transparent" />
-                                </div>
-
-                                {editId && (
-                                    <div className="mb-4 relative">
-                                        <label className="block text-[11px] font-bold text-[#9D0052] uppercase tracking-widest mb-1">Reason for Edit *</label>
-                                        
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsReasonDropdownOpen(!isReasonDropdownOpen)}
-                                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 flex items-center justify-between bg-pink-50/20 focus:border-[#9D0052] text-sm font-semibold text-gray-900"
-                                        >
-                                            <span className={formData.reason ? "text-gray-900" : "text-gray-400"}>
-                                                {formData.reason || "Select reason..."}
-                                            </span>
-                                            <ChevronDown className={`w-4 h-4 text-[#9D0052] shrink-0 transition-transform ${isReasonDropdownOpen ? 'rotate-180' : ''}`} />
-                                        </button>
-
-                                        {isReasonDropdownOpen && (
-                                            <div className="absolute bottom-full left-0 mb-1.5 z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto py-1">
-                                                {EDIT_REASONS.map((r) => (
-                                                    <button
-                                                        key={r}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setFormData({ ...formData, reason: r });
-                                                            setIsReasonDropdownOpen(false);
-                                                        }}
-                                                        className={`block w-full text-left px-3.5 py-2.5 text-sm font-medium transition-colors ${
-                                                            formData.reason === r ? 'bg-pink-50 text-[#9D0052] font-bold' : 'text-gray-700 hover:bg-gray-50'
-                                                        }`}
-                                                    >
-                                                        {r}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </form>
-                        </div>
-
-                        <button type="submit" form="workerLedgerForm" disabled={isSaving} className="w-full bg-[#9D0052] text-white text-sm font-bold rounded-xl py-3.5 tracking-wider uppercase transition-all active:scale-[0.99] shrink-0 mt-1">
-                            {isSaving ? "SAVING..." : editId ? "SAVE CHANGES" : "SAVE ADVANCE"}
-                        </button>
-                    </div>
-                </div>
-            )}
-        </main>
-    );
-};
-
-export default WorkerLedger;
-</file>
-
 <file path="src/App.jsx">
 import { BrowserRouter,Routes,Route } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
@@ -4535,7 +4683,7 @@ export default function App() {
       <Route path="/dashboard" element={<ProtectedRoute> <Dashboard/> </ProtectedRoute>} />
       <Route path="/add-worker" element={<ProtectedRoute><Add_Worker/> </ProtectedRoute>} />
       <Route path="/select-date" element={ <ProtectedRoute><DateSelectorPage/> </ProtectedRoute>} />
-      <Route path="/edit-worker/" element={<ProtectedRoute><EditWorker/> </ProtectedRoute>} />
+      <Route path="/edit-worker" element={<ProtectedRoute><EditWorker/> </ProtectedRoute>} />
       <Route path="/report" element={<ProtectedRoute><MonthlyReport/></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile/></ProtectedRoute>} />
       <Route path="/cashbook" element={<ProtectedRoute><CashbookPage/></ProtectedRoute>} />
@@ -4547,41 +4695,6 @@ export default function App() {
     </BrowserRouter>
   );
 }
-</file>
-
-<file path="src/lib/api.js">
-import axios from "axios";
-import { auth } from "../firebase";
-
-const baseURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? `http://${window.location.hostname}:5000/api` : "");
-if (!baseURL) {
-  console.error("CRITICAL: VITE_API_URL environment variable is missing in production build!");
-}
-
-export const api = axios.create({
-  baseURL,
-  headers: { "Content-Type": "application/json" },
-});
-
-api.interceptors.request.use(
-  async (config) => {
-    if (auth.currentUser) {
-      const token = await auth.currentUser.getIdToken();
-      localStorage.setItem("authToken", token);
-      config.headers.Authorization = `Bearer ${token}`;
-    } else {
-      const token = localStorage.getItem("authToken");
-      if (token) config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-export const fetcher = (url) => api.get(url).then(res => {
-  if (typeof res.data === "string") throw new Error("Bad API URL or HTML response received");
-  return res.data;
-});
 </file>
 
 </files>

@@ -25,6 +25,7 @@ const CashbookPage = () => {
     const [bossFormData, setBossFormData] = useState({ amount: '', notes: '', transactionId: '', reason: '', paymentMethod: 'Cash'});
     const [isBossEditMode, setIsBossEditMode] = useState(false);
     const [showExportModal, setShowExportModal] = useState(false);
+    const [pendingUpiData, setPendingUpiData] = useState(null);
 
     const [isWaitingForUpi, setIsWaitingForUpi] = useState(false);
     
@@ -118,62 +119,89 @@ const CashbookPage = () => {
     }
 
     // Handle Worker Advance Submission (Moved from Dashboard!)
-    const handleSubmitAdvance = async (e) => {
-    e.preventDefault();
-    if(!selectedWorkerId){
-        toast.error("Please select a worker!");
-        return;
-    }
+   const handleSubmitAdvance = async (e) => {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        if(!selectedWorkerId){
+            toast.error("Please select a worker!");
+            return;
+        }
 
-    const amountNum = Number(advanceAmount);
-
-    // If Online is selected, launch GPay first!
-    if (advancePaymentMethod === 'Online' && !isWaitingForUpi) {
-        setIsWaitingForUpi(true);
+        const amountNum = Number(advanceAmount);
         const workerObj = workers.find(w => (w._id || w.id) === selectedWorkerId);
-        const note = advanceNotes || `Advance for ${workerObj?.name || 'Worker'}`;
+        const workerName = workerObj?.name || 'Worker';
+        const note = advanceNotes || `Advance for ${workerName}`;
 
-        triggerUpiPayment(amountNum, note);
-        toast("Complete payment in GPay. Tap Save again upon return to log.");
-        return;
-    }
+        // If Online is selected and we aren't already waiting for confirmation
+        if (advancePaymentMethod === 'Online' && !isWaitingForUpi) {
+            // Save payload data temporarily for the confirmation popup
+            setPendingUpiData({
+                entryType: "Advance",
+                workerId: selectedWorkerId,
+                amount: amountNum,
+                paymentMethod: "Online",
+                description: advanceNotes,
+                date: dayjs(`${entryDate}T${entryTime}`).toISOString(),
+                workerName: workerName
+            });
 
-    try {
-        setIsSubmittingPayment(true);
-        const payload = {
-            entryType: "Advance",
-            workerId: selectedWorkerId,
-            amount: amountNum,
-            paymentMethod: advancePaymentMethod,
-            description: advanceNotes,
-            date: dayjs(`${entryDate}T${entryTime}`).toISOString()
-        };
-        await api.post("/ledger", payload);
-        toast.success("Advance payment logged successfully!");
+            setIsWaitingForUpi(true);
+            triggerUpiPayment(amountNum, note);
+            return;
+        }
 
-        // Reset form and close modal
-        setSelectedWorkerId("");
-        setAdvanceAmount("");
-        setAdvanceNotes("");
-        setAdvancePaymentMethod("Cash");
-        setIsWaitingForUpi(false);
-        setShowWorkerModal(false);
+        // Standard save flow (for Cash, Check, or confirming Online)
+        try {
+            setIsSubmittingPayment(true);
+            const payload = pendingUpiData ? {
+                entryType: pendingUpiData.entryType,
+                workerId: pendingUpiData.workerId,
+                amount: pendingUpiData.amount,
+                paymentMethod: pendingUpiData.paymentMethod,
+                description: pendingUpiData.description,
+                date: pendingUpiData.date
+            } : {
+                entryType: "Advance",
+                workerId: selectedWorkerId,
+                amount: amountNum,
+                paymentMethod: advancePaymentMethod,
+                description: advanceNotes,
+                date: dayjs(`${entryDate}T${entryTime}`).toISOString()
+            };
 
-        mutate('/ledger');
-    } catch (error) {
-        console.error("Error logging advance:", error);
-        toast.error(error.response?.data?.message || "Failed to log advance payment.");
-    } finally {
-        setIsSubmittingPayment(false);
-        setIsWaitingForUpi(false);
-    }
-}
+            await api.post("/ledger", payload);
+            toast.success("Advance payment logged successfully! 🎉");
+
+            // Reset form and close modal
+            setSelectedWorkerId("");
+            setAdvanceAmount("");
+            setAdvanceNotes("");
+            setAdvancePaymentMethod("Cash");
+            setIsWaitingForUpi(false);
+            setPendingUpiData(null);
+            setShowWorkerModal(false);
+
+            mutate('/ledger');
+        } catch (error) {
+            console.error("Error logging advance:", error);
+            toast.error(error.response?.data?.message || "Failed to log advance payment.");
+        } finally {
+            setIsSubmittingPayment(false);
+            setIsWaitingForUpi(false);
+        }
+    };
 
 
     const triggerUpiPayment = (amount, note) => {
-    // Standard UPI Intent URI for mobile devices & APKs
-    const upiUrl = `upi://pay?pa=merchant@upi&pn=ExpenseEngine&am=${amount}&tn=${encodeURIComponent(note || 'Worker Advance')}&cu=INR`;
-    window.location.href = upiUrl;
+    // Find the selected worker object from your workers array
+        const workerObj = workers.find(w => (w._id || w.id) === selectedWorkerId);
+        
+        // Use their saved UPI ID, or fallback to phone@ybl if not set
+        const workerUpiId = workerObj?.upiId || (workerObj?.phoneNumber ? `${workerObj.phoneNumber}@ybl` : "merchant@upi");
+        const workerName = encodeURIComponent(workerObj?.name || 'Worker');
+
+        // 💡 Launches GPay/PhonePe directly with the worker's personal VPA and amount pre-filled!
+        const upiUrl = `upi://pay?pa=${workerUpiId}&pn=${workerName}&am=${amount}&tn=${encodeURIComponent(note || 'Worker Advance')}&cu=INR`;
+        window.location.href = upiUrl;
     };
 
     const handleBossSubmit = async (e) => {
@@ -847,23 +875,28 @@ return (
                         </div>
 
                     
-                        <button type="submit" form="unifiedForm" disabled={isSubmittingPayment} className={`w-full text-white text-sm font-bold rounded-xl py-3.5 tracking-wider uppercase transition-all active:scale-[0.99] disabled:opacity-70 ${
-                                showWorkerModal && advancePaymentMethod === 'Online' 
-                                    ? 'bg-[#1A73E8] hover:bg-[#1557B0]' 
-                                    : showWorkerModal 
-                                        ? 'bg-[#9D0052] hover:bg-[#800043]' 
-                                        : 'bg-[#0E793C] hover:bg-[#0A5C2D]'
-                            }`}>
-                                {isSubmittingPayment 
-                                    ? "SAVING..." 
-                                    : bossEditId 
-                                        ? "SAVE CHANGES" 
-                                        : showWorkerModal && advancePaymentMethod === 'Online' 
-                                            ? `PAY ₹${advanceAmount || 0} ON GPAY` 
+                                <button 
+                                    type="submit" 
+                                    form="unifiedForm" 
+                                    disabled={isSubmittingPayment} 
+                                    className={`w-full text-white text-sm font-bold rounded-xl py-3.5 tracking-wider uppercase transition-all active:scale-[0.99] disabled:opacity-70 ${
+                                        showWorkerModal && advancePaymentMethod === 'Online' 
+                                            ? 'bg-[#1A73E8] hover:bg-[#1557B0]' 
                                             : showWorkerModal 
-                                                ? "SAVE ADVANCE" 
-                                                : "SAVE DEPOSIT"}
-                            </button>
+                                                ? 'bg-[#9D0052] hover:bg-[#800043]' 
+                                                : 'bg-[#0E793C] hover:bg-[#0A5C2D]'
+                                    }`}
+                                >
+                                    {isSubmittingPayment 
+                                        ? "SAVING..." 
+                                        : bossEditId 
+                                            ? "SAVE CHANGES" 
+                                            : showWorkerModal && advancePaymentMethod === 'Online' 
+                                                ? `PAY ₹${advanceAmount || 0} ON GPAY` 
+                                                : showWorkerModal 
+                                                    ? "SAVE ADVANCE" 
+                                                    : "SAVE DEPOSIT"}
+                                </button>
                     </div>
                 </div>
             )}
@@ -925,6 +958,51 @@ return (
             )}
             {/* Only show BottomNav if NO modals are open */}
             {(!showWorkerModal && !showBossModal && !showExportModal) && <BottomNav />}
+
+            {/* 🌟 FULL-SCREEN BLURRED UPI PAYMENT CONFIRMATION POPUP */}
+            {isWaitingForUpi && pendingUpiData && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl p-6 relative animate-pop-in text-center space-y-4">
+                        
+                        <div className="w-12 h-12 bg-blue-50 text-[#1048A4] rounded-full flex items-center justify-center mx-auto text-xl font-bold">
+                            ₹
+                        </div>
+
+                        <div>
+                            <h2 className="text-base font-extrabold text-gray-900 tracking-tight">Confirm UPI Payment</h2>
+                            <p className="text-sm font-medium text-gray-600 mt-2 leading-relaxed">
+                                Was the payment of <span className="font-bold text-[#C0392B]">₹{pendingUpiData.amount}</span> successfully transferred to <span className="font-bold text-[#1048A4]">{pendingUpiData.workerName}</span>?
+                            </p>
+                        </div>
+
+                        <div className="flex gap-3 pt-2">
+                            {/* NO / CANCELED BUTTON */}
+                            <button 
+                                type="button"
+                                onClick={() => {
+                                    setIsWaitingForUpi(false);
+                                    setPendingUpiData(null);
+                                    toast("❌ Transaction cancelled.");
+                                }}
+                                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold py-3.5 rounded-xl transition active:scale-[0.98]"
+                            >
+                                No, Cancel
+                            </button>
+                            
+                            {/* YES / CONFIRMED BUTTON */}
+                            <button 
+                                type="button"
+                                disabled={isSubmittingPayment}
+                                onClick={handleSubmitAdvance}
+                                className="flex-1 bg-[#0E793C] hover:bg-[#0A5C2D] text-white text-sm font-bold py-3.5 rounded-xl transition active:scale-[0.98] shadow-lg"
+                            >
+                                {isSubmittingPayment ? "RECORDING..." : "Yes, Record Payment"}
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

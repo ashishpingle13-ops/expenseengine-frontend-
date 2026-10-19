@@ -28,6 +28,7 @@ export default function PickContact() {
 
     // 1. NATIVE ANDROID APK: Grabs EVERY contact in the phone automatically!
     const loadAllNativeContacts = async () => {
+        if (!Capacitor.isNativePlatform()) return;
         try {
             setIsLoading(true);
             const permission = await Contacts.requestPermissions();
@@ -67,6 +68,7 @@ export default function PickContact() {
 
     // 2. WEB BROWSER FALLBACK (When testing in Chrome before building APK)
     const loadContacts = async () => {
+
         if (Capacitor.isNativePlatform()) {
             return loadAllNativeContacts();
         }
@@ -167,13 +169,13 @@ export default function PickContact() {
                         </div>
                     ))
                 ) : (
-                    <div className="text-center py-12 px-4">
-                        <p className="text-gray-500 text-sm font-semibold mb-2">No device contacts loaded or found.</p>
+                    <div className="text-center py-8 px-4">
+                        <p className="text-gray-500 text-sm font-semibold mb-3">Want to import phone contacts?</p>
                         <button 
-                            onClick={loadContacts}
-                            className="text-xs font-bold text-[#1048A4] bg-blue-50 border border-blue-200 px-4 py-2 rounded-lg"
+                            onClick={loadAllNativeContacts}
+                            className="w-full bg-[#1048A4] text-white text-sm font-bold py-3 rounded-xl shadow-md active:scale-98 transition flex items-center justify-center gap-2"
                         >
-                            Tap to Allow / Load Contacts
+                            <Plus className="w-4 h-4" /> Load All Phone Contacts
                         </button>
                     </div>
                 )}

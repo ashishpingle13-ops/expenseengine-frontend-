@@ -14,6 +14,7 @@ export default function AddWorker() {
 
     const [name, setName] = useState(location.state?.initialName || '');
     const [phone, setPhone] = useState(location.state?.initialPhone || '');
+    const [upiHandle, setUpiHandle] = useState("@ybl");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // ─── Strict Validation Handlers ──────────────────────────────
@@ -89,9 +90,14 @@ export default function AddWorker() {
 
         try {
             setIsSubmitting(true);
+            
+            // 💡 Combine phone number + chosen handle suffix if phone is provided
+            const finalUpiId = phone.length === 10 ? `${phone}${upiHandle}` : "";
+
             const payload = {
                 name: name.trim(),
                 phoneNumber: phone,
+                upiId: finalUpiId, // 💡 Send optional UPI ID
                 isActive: true
             };
 
@@ -157,6 +163,33 @@ export default function AddWorker() {
                                 onChange={handlePhoneChange}
                                 className="w-full text-base font-semibold text-gray-900 outline-none bg-transparent placeholder:text-gray-400 placeholder:font-normal tracking-wide"
                             />
+                        </div>
+                    </div>
+
+                    {/* Optional UPI ID Builder Section */}
+                    <div className="pt-2">
+                        <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-1.5">
+                            Worker UPI ID <span className="normal-case tracking-normal font-normal text-gray-400">(Optional)</span>
+                        </label>
+                        <div className="flex gap-2 items-center">
+                            {/* Auto-populated preview box */}
+                            <div className="flex-1 bg-gray-50 border border-gray-300 rounded-xl px-3.5 py-3 text-sm font-bold text-gray-700 truncate select-none">
+                                {phone ? `${phone}${upiHandle}` : "Enter phone above..."}
+                            </div>
+                            
+                            {/* Bank / App Handle Suffix Selector */}
+                            <select 
+                                value={upiHandle} 
+                                onChange={(e) => setUpiHandle(e.target.value)}
+                                className="bg-white border border-gray-300 rounded-xl px-3 py-3 text-sm font-bold text-[#1048A4] outline-none cursor-pointer shrink-0 shadow-sm"
+                            >
+                                <option value="@ybl">@ybl (PhonePe)</option>
+                                <option value="@okaxis">@okaxis (GPay)</option>
+                                <option value="@okicici">@okicici (GPay)</option>
+                                <option value="@oksbi">@oksbi (GPay)</option>
+                                <option value="@paytm">@paytm (Paytm)</option>
+                                <option value="@ptaxis">@ptaxis (Paytm)</option>
+                            </select>
                         </div>
                     </div>
 
