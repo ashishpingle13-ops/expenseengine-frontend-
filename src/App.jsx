@@ -36,7 +36,7 @@ export default function App() {
       <Route path="/dashboard" element={<ProtectedRoute> <Dashboard/> </ProtectedRoute>} />
       <Route path="/add-worker" element={<ProtectedRoute><Add_Worker/> </ProtectedRoute>} />
       <Route path="/select-date" element={ <ProtectedRoute><DateSelectorPage/> </ProtectedRoute>} />
-      <Route path="/edit-worker/" element={<ProtectedRoute><EditWorker/> </ProtectedRoute>} />
+      <Route path="/edit-worker" element={<ProtectedRoute><EditWorker/> </ProtectedRoute>} />
       <Route path="/report" element={<ProtectedRoute><MonthlyReport/></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile/></ProtectedRoute>} />
       <Route path="/cashbook" element={<ProtectedRoute><CashbookPage/></ProtectedRoute>} />

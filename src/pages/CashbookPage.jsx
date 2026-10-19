@@ -1,5 +1,5 @@
 import React , {  useState, useMemo } from 'react'
-import { Search, FileText, ChevronRight, User, ChevronDown, Plus, Pencil, X, Calendar, FileSpreadsheet, FileDown, Box, Clock3, NotebookText, IndianRupee, Hash } from 'lucide-react';
+import { Search, FileText, ChevronRight, UserPlus, ChevronDown, Plus, Pencil, X, Calendar, FileSpreadsheet, FileDown, Box, Clock3, NotebookText, IndianRupee, Hash } from 'lucide-react';
 import { api, fetcher } from '../lib/api';
 import toast from 'react-hot-toast';
 import BottomNav from '../components/BottomNav'
@@ -25,6 +25,8 @@ const CashbookPage = () => {
     const [bossFormData, setBossFormData] = useState({ amount: '', notes: '', transactionId: '', reason: '', paymentMethod: 'Cash'});
     const [isBossEditMode, setIsBossEditMode] = useState(false);
     const [showExportModal, setShowExportModal] = useState(false);
+
+    const [isWaitingForUpi, setIsWaitingForUpi] = useState(false);
     
     const [isWorkerDropdownOpen, setIsWorkerDropdownOpen] = useState(false);
     const [isReasonDropdownOpen, setIsReasonDropdownOpen] = useState(false);
@@ -117,42 +119,62 @@ const CashbookPage = () => {
 
     // Handle Worker Advance Submission (Moved from Dashboard!)
     const handleSubmitAdvance = async (e) => {
-        e.preventDefault();
-        if(!selectedWorkerId){
-            toast.error("Please select a worker!");
-            return;
-        }
-
-        try {
-            setIsSubmittingPayment(true);
-            const payload = {
-                entryType: "Advance",
-                workerId: selectedWorkerId,
-                amount: Number(advanceAmount),
-                paymentMethod: advancePaymentMethod,
-                description: advanceNotes,
-                date: dayjs(`${entryDate}T${entryTime}`).toISOString()
-            };
-            await api.post("/ledger", payload);
-            toast.success("Advance payment logged successfully!");
-
-            // Reset form and close modal
-            setSelectedWorkerId("");
-            setAdvanceAmount("");
-            setAdvanceNotes("");
-            setAdvancePaymentMethod("Cash");
-            setIsWorkerDropdownOpen(false);
-            setShowWorkerModal(false);
-
-            mutate('/ledger');
-        } catch (error) {
-            console.error("Error logging advance:", error);
-            toast.error(error.response?.data?.message || "Failed to log advance payment.");
-        } finally {
-            setIsSubmittingPayment(false);
-        }
+    e.preventDefault();
+    if(!selectedWorkerId){
+        toast.error("Please select a worker!");
+        return;
     }
 
+    const amountNum = Number(advanceAmount);
+
+    // If Online is selected, launch GPay first!
+    if (advancePaymentMethod === 'Online' && !isWaitingForUpi) {
+        setIsWaitingForUpi(true);
+        const workerObj = workers.find(w => (w._id || w.id) === selectedWorkerId);
+        const note = advanceNotes || `Advance for ${workerObj?.name || 'Worker'}`;
+
+        triggerUpiPayment(amountNum, note);
+        toast("Complete payment in GPay. Tap Save again upon return to log.");
+        return;
+    }
+
+    try {
+        setIsSubmittingPayment(true);
+        const payload = {
+            entryType: "Advance",
+            workerId: selectedWorkerId,
+            amount: amountNum,
+            paymentMethod: advancePaymentMethod,
+            description: advanceNotes,
+            date: dayjs(`${entryDate}T${entryTime}`).toISOString()
+        };
+        await api.post("/ledger", payload);
+        toast.success("Advance payment logged successfully!");
+
+        // Reset form and close modal
+        setSelectedWorkerId("");
+        setAdvanceAmount("");
+        setAdvanceNotes("");
+        setAdvancePaymentMethod("Cash");
+        setIsWaitingForUpi(false);
+        setShowWorkerModal(false);
+
+        mutate('/ledger');
+    } catch (error) {
+        console.error("Error logging advance:", error);
+        toast.error(error.response?.data?.message || "Failed to log advance payment.");
+    } finally {
+        setIsSubmittingPayment(false);
+        setIsWaitingForUpi(false);
+    }
+}
+
+
+    const triggerUpiPayment = (amount, note) => {
+    // Standard UPI Intent URI for mobile devices & APKs
+    const upiUrl = `upi://pay?pa=merchant@upi&pn=ExpenseEngine&am=${amount}&tn=${encodeURIComponent(note || 'Worker Advance')}&cu=INR`;
+    window.location.href = upiUrl;
+    };
 
     const handleBossSubmit = async (e) => {
         if(e) e.preventDefault();
@@ -393,12 +415,22 @@ const CashbookPage = () => {
 
             {/* Export / Report Button */}
             {activeTab === 'workers' ? (
-                <button 
-                    onClick={() => setShowExportModal(true)}
-                    className="bg-[#9D0052] border border-[#9D0052] text-white rounded-md px-3 py-2.5 flex items-center justify-center shrink-0 active:scale-95 transition"
-                >
-                    <FileDown size={18} />
-                </button>
+                <div className="flex gap-1.5 shrink-0">
+                    <button 
+                        onClick={() => navigate('/pick-contact', { state: { slideDirection: 'left' } })}
+                        className="bg-[#1048A4] border border-[#1048A4] text-white rounded-md px-3 py-2.5 flex items-center justify-center active:scale-95 transition shadow-sm"
+                        title="Add Worker"
+                    >
+                        <UserPlus size={18} />
+                    </button>
+                    <button 
+                        onClick={() => setShowExportModal(true)}
+                        className="bg-[#9D0052] border border-[#9D0052] text-white rounded-md px-3 py-2.5 flex items-center justify-center active:scale-95 transition shadow-sm"
+                        title="Export Ledger"
+                    >
+                        <FileDown size={18} />
+                    </button>
+                </div>
             ) : (
                 <button 
                     onClick={() => setIsBossEditMode(!isBossEditMode)}
@@ -815,9 +847,23 @@ return (
                         </div>
 
                     
-                        <button type="submit" form="unifiedForm" disabled={isSubmittingPayment} className={`w-full text-white text-sm font-bold rounded-xl py-3.5 tracking-wider uppercase transition-all active:scale-[0.99] disabled:opacity-70 ${showWorkerModal ? 'bg-[#9D0052] hover:bg-[#800043]' : 'bg-[#0E793C] hover:bg-[#0A5C2D]'}`}>
-                            {isSubmittingPayment ? "SAVING..." : bossEditId ? "SAVE CHANGES" : showWorkerModal ? "SAVE ADVANCE" : "SAVE DEPOSIT"}
-                        </button>
+                        <button type="submit" form="unifiedForm" disabled={isSubmittingPayment} className={`w-full text-white text-sm font-bold rounded-xl py-3.5 tracking-wider uppercase transition-all active:scale-[0.99] disabled:opacity-70 ${
+                                showWorkerModal && advancePaymentMethod === 'Online' 
+                                    ? 'bg-[#1A73E8] hover:bg-[#1557B0]' 
+                                    : showWorkerModal 
+                                        ? 'bg-[#9D0052] hover:bg-[#800043]' 
+                                        : 'bg-[#0E793C] hover:bg-[#0A5C2D]'
+                            }`}>
+                                {isSubmittingPayment 
+                                    ? "SAVING..." 
+                                    : bossEditId 
+                                        ? "SAVE CHANGES" 
+                                        : showWorkerModal && advancePaymentMethod === 'Online' 
+                                            ? `PAY ₹${advanceAmount || 0} ON GPAY` 
+                                            : showWorkerModal 
+                                                ? "SAVE ADVANCE" 
+                                                : "SAVE DEPOSIT"}
+                            </button>
                     </div>
                 </div>
             )}

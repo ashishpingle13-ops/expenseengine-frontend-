@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Search, Plus, User } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { Contacts } from '@capacitor-community/contacts';
+import { Capacitor } from '@capacitor/core';
 
 export default function PickContact() {
     const navigate = useNavigate();
@@ -17,7 +19,58 @@ export default function PickContact() {
 
     
 
+    // Automatically load all contacts when opening the page on Android APK!
+    useEffect(() => {
+        if (Capacitor.isNativePlatform()) {
+            loadAllNativeContacts();
+        }
+    }, []);
+
+    // 1. NATIVE ANDROID APK: Grabs EVERY contact in the phone automatically!
+    const loadAllNativeContacts = async () => {
+        try {
+            setIsLoading(true);
+            const permission = await Contacts.requestPermissions();
+            if (permission.contacts !== 'granted') {
+                toast.error("Please allow contact permission to see your contacts");
+                return;
+            }
+
+            const result = await Contacts.getContacts({
+                projection: { name: true, phones: true }
+            });
+
+            const allContacts = [];
+            result.contacts.forEach((c, idx) => {
+                const displayName = c.name?.display || '';
+                const rawPhone = c.phones?.[0]?.number || '';
+                const cleanPhone = rawPhone.replace(/\D/g, '').slice(-10);
+
+                if (cleanPhone.length === 10) {
+                    allContacts.push({
+                        id: c.contactId || idx,
+                        name: displayName || `+91 ${cleanPhone}`,
+                        phone: cleanPhone
+                    });
+                }
+            });
+
+            // Sort alphabetically just like Khatabook
+            allContacts.sort((a, b) => a.name.localeCompare(b.name));
+            setDeviceContacts(allContacts);
+        } catch (error) {
+            console.error("Error loading native contacts:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // 2. WEB BROWSER FALLBACK (When testing in Chrome before building APK)
     const loadContacts = async () => {
+        if (Capacitor.isNativePlatform()) {
+            return loadAllNativeContacts();
+        }
+
         if ('contacts' in navigator && 'select' in navigator.contacts) {
             try {
                 setIsLoading(true);
@@ -28,17 +81,13 @@ export default function PickContact() {
                     phone: (c.tel?.[0] || '').replace(/\D/g, '').slice(-10)
                 })).filter(c => c.phone.length === 10);
                 setDeviceContacts(formatted);
-                localStorage.setItem('cachedDeviceContacts', JSON.stringify(formatted));
             } catch (error) {
                 console.log("Contact picker closed or denied:", error);
-                toast.error("Contact access cancelled or blocked by browser.");
             } finally {
                 setIsLoading(false);
             }
         } else {
-            // Friendly fallback if testing over insecure HTTP local network
-            setIsLoading(false);
-            toast("Contact picker requires HTTPS or native app build. Type details or use Add Worker manually.");
+            toast("Full automatic contact list works inside the Android APK!");
         }
     };
 

@@ -241,88 +241,23 @@ const hasUnsavedChanges = norm(originalStatuses) !== norm(workerStatuses);
         </div>  
                 
                 {/* 🚨 SCROLL FADE GRADIENT */}
-                <div className='fixed bottom-10 left-0 right-0 h-32 bg-linear-to-t from-gray-100 via-gray-100/90 to-transparent pointer-events-none z-30'></div>
+                <div className='fixed bottom-10  from-gray-100 via-gray-100/90 to-transparent pointer-events-none z-30'></div>
                 {/* 🚨 ADD NEW WORKER button */}
-                <div className="fixed bottom-15 left-1 right-1 z-40 max-w-3xl mx-auto">
-                <button 
+                <button
                     onClick={() => navigate('/pick-contact', { state: { slideDirection: 'left' } })}
-                    className="w-full bg-green-700 hover:bg-green-800 text-white font-extrabold text-[15px] py-3 rounded-xl shadow-lg active:scale-[0.98] transition tracking-wide flex justify-center items-center gap-2"
+                    className="fixed z-30 flex items-center gap-1.5 font-bold text-white text-[13px] tracking-wide bg-green-700 transition-colors duration-200 active:scale-95"
+                    style={{
+                        bottom: 84,
+                        right: 16,
+                        borderRadius: 999,
+                        padding: "11px 18px",
+                        boxShadow: "0 3px 10px rgba(16,72,164,0.45)"
+                    }}
                 >
-                    <UserPlus size={20} /> ADD NEW WORKER
+                    <UserPlus className="w-4 h-4" />
+                    ADD WORKER
                 </button>
-            </div>
 
-
-        {/* Advance Payment Modal Overlay */}
-        {isPaymentModalOpen && (
-            <div className='fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4'>
-
-                {/* The White Popup Card */}
-                <div className='bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 relative'>
-
-
-                    {/* Header & Close Button */}
-                    <div className='flex justify-between items-center mb-6'>
-                        <h2 className='text-lg font-bold text-gray-800'> Log Advance Payment</h2>
-                        <button
-                        onClick={() => setIsPaymentModalOpen(false)}
-                        className='text-gray-500 hover:text-black transition text-xl font-bold'>
-                            ✕
-                        </button>
-                    </div>
-
-                    {/* The Form */}
-                    <form onSubmit={handleSubmitAdvance} className='space-y-4'>
-
-                        <div>
-                            <label className='block text-sm font-semibold text-gray-700 mb-1'>Select Worker</label>
-                            <select 
-                            value={selectedWorkerId}
-                            onChange={(e) => setSelectedWorkerId(e.target.value)}
-                            className='w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-green-600 outline-none appearance-none bg-white'>
-                                <option value="">-- Select Worker --</option>
-                                {workers.map((worker) => (
-                                    <option key={worker._id || worker.id} value={worker._id || worker.id}>
-                                        {worker.name}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div>
-                            <label className='block text-sm font-semibold text-gray-700 mb-1"'>Amount (₹)</label>
-                            <div className='relative'>
-                                <input 
-                                type="number"
-                                required
-                                value={advanceAmount}
-                                onChange={(e) => setAdvanceAmount(e.target.value)}
-                                placeholder='Enter amount'
-                                className='w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-green-600 outline-none pr-8' />
-                                <span className="absolute right-4 top-2.5 text-gray-500 font-bold">₹</span>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1">Transaction ID / Notes (Optional)</label>
-                            <textarea 
-                            value={advanceNotes}
-                            onChange={(e) => setAdvanceNotes(e.target.value)}
-                            placeholder='Enter UPI ID, Transaction ID or any notes...'
-                            rows="6"
-                            className='w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-green-600 outline-none resize-none'></textarea>
-                        </div>
-
-                        <button
-                        type='submit'
-                        disabled= {isSubmittingPayment}
-                        className='w-full bg-green-700 hover:bg-green-800 text-white font-bold py-3 rounded-xl mt-2 transition active:scale-[0.98]'>
-                            {isSubmittingPayment ? "Submitting..." : "Submit"}
-                        </button>
-                    </form>
-                </div>
-            </div>
-        )}
 
         </div>
         <BottomNav/>
