@@ -11,6 +11,7 @@ import Profile from "./pages/Profile";
 import CashbookPage from "./pages/CashbookPage";
 import  Expenses  from "./pages/Expenses";
 import WorkerLedger from "./pages/WorkerLedger";
+import PickContact from "./pages/PickContact";
 
 export default function App() {
   return (
@@ -41,7 +42,7 @@ export default function App() {
       <Route path="/cashbook" element={<ProtectedRoute><CashbookPage/></ProtectedRoute>} />
       <Route path="/expenses" element={<ProtectedRoute><Expenses/></ProtectedRoute>} />
       <Route path="/worker/:id" element={<ProtectedRoute><WorkerLedger/></ProtectedRoute>} />
-
+      <Route path="/pick-contact" element={ <ProtectedRoute> <PickContact/> </ProtectedRoute> } />
 
     </Routes>
     </BrowserRouter>

@@ -29,6 +29,7 @@ const WorkerLedger = () => {
     const [formData, setFormData] = useState({ amount: '', notes: '', reason: '', paymentMethod: 'Cash' });
     const [isSaving, setIsSaving] = useState(false);
     const EDIT_REASONS = ["Amount correction", "Date correction", "Payment method correction" ,"Duplicate entry", "Other"];
+    const [isReasonDropdownOpen, setIsReasonDropdownOpen] = useState(false);
     const [entryDate, setEntryDate] = useState(dayjs().format('YYYY-MM-DD'));
     const [entryTime, setEntryTime] = useState(dayjs().format('HH:mm'));
     // 🚨 BUG FIX 1: Ensure ledgerHistory is always treated as an array so .filter() doesn't crash
@@ -113,7 +114,7 @@ const WorkerLedger = () => {
     };
 
     return (
-        <main className="relative mx-auto flex min-h-screen max-w-md flex-col overflow-hidden bg-[#F9FAFB] animate-slide-in-right">
+        <main className="fixed inset-0 flex flex-col bg-[#F9FAFB] max-w-md mx-auto overflow-hidden animate-slide-in-right font-sans">
             
             {/* 1. BLUE HEADER */}
             <header className="bg-[#1048A4] px-4 pb-12 pt-4 text-white">
@@ -306,15 +307,39 @@ const WorkerLedger = () => {
                                 </div>
 
                                 {editId && (
-                                    <div className="mb-4">
+                                    <div className="mb-4 relative">
                                         <label className="block text-[11px] font-bold text-[#9D0052] uppercase tracking-widest mb-1">Reason for Edit *</label>
-                                        <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 bg-pink-50/20 focus-within:border-[#9D0052]">
-                                            <select value={formData.reason} onChange={(e) => setFormData({...formData, reason: e.target.value})} className="flex-1 text-sm font-semibold text-gray-900 outline-none appearance-none bg-transparent">
-                                                <option value="" disabled>Select reason...</option>
-                                                {EDIT_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
-                                            </select>
-                                            <ChevronDown className="w-4 h-4 text-[#9D0052] shrink-0" />
-                                        </div>
+                                        
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsReasonDropdownOpen(!isReasonDropdownOpen)}
+                                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 flex items-center justify-between bg-pink-50/20 focus:border-[#9D0052] text-sm font-semibold text-gray-900"
+                                        >
+                                            <span className={formData.reason ? "text-gray-900" : "text-gray-400"}>
+                                                {formData.reason || "Select reason..."}
+                                            </span>
+                                            <ChevronDown className={`w-4 h-4 text-[#9D0052] shrink-0 transition-transform ${isReasonDropdownOpen ? 'rotate-180' : ''}`} />
+                                        </button>
+
+                                        {isReasonDropdownOpen && (
+                                            <div className="absolute bottom-full left-0 mb-1.5 z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto py-1">
+                                                {EDIT_REASONS.map((r) => (
+                                                    <button
+                                                        key={r}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setFormData({ ...formData, reason: r });
+                                                            setIsReasonDropdownOpen(false);
+                                                        }}
+                                                        className={`block w-full text-left px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                                                            formData.reason === r ? 'bg-pink-50 text-[#9D0052] font-bold' : 'text-gray-700 hover:bg-gray-50'
+                                                        }`}
+                                                    >
+                                                        {r}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </form>

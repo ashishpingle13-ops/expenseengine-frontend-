@@ -1,7 +1,7 @@
 import axios from "axios";
 import { auth } from "../firebase";
 
-const baseURL = import.meta.env.VITE_API_URL || "https://expenseengine-backend.vercel.app/api";
+const baseURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? `http://${window.location.hostname}:5000/api` : "");
 if (!baseURL) {
   console.error("CRITICAL: VITE_API_URL environment variable is missing in production build!");
 }

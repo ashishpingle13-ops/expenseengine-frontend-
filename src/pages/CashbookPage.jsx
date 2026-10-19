@@ -27,7 +27,7 @@ const CashbookPage = () => {
     const [showExportModal, setShowExportModal] = useState(false);
     
     const [isWorkerDropdownOpen, setIsWorkerDropdownOpen] = useState(false);
-
+    const [isReasonDropdownOpen, setIsReasonDropdownOpen] = useState(false);
 
     const EDIT_REASONS = ["Amount correction", "Date correction", "Payment method correction", "Duplicate entry", "Other"];
     const [entryDate, setEntryDate] = useState(dayjs().format('YYYY-MM-DD'));
@@ -164,9 +164,11 @@ const CashbookPage = () => {
 
         try {
             setIsSubmittingPayment(true);
-            const finalDescryption = bossFormData.transactionId
-                ? `${bossFormData.notes} (Txn ID: ${bossFormData.transactionId})`
-                : bossFormData.notes;
+            const cleanNotes = bossFormData.notes.trim();
+            const cleanTxn = bossFormData.transactionId.trim();
+            const finalDescryption = cleanTxn
+                ? `${cleanNotes ? cleanNotes : 'Boss Deposit'} (Txn ID: ${cleanTxn})`
+                : cleanNotes;
 
             const payload = {
                 amount: Number(bossFormData.amount),
@@ -207,10 +209,11 @@ const CashbookPage = () => {
         setEntryDate(dayjs(deposit.date).format('YYYY-MM-DD'));
         setEntryTime(dayjs(deposit.date).format('HH:mm'));
 
+        const rawNotes = hasTxn ? desc.split(" (Txn ID: ")[0].trim() : desc.trim();
         setBossFormData({
             amount: deposit.amount.toString(),
-            notes: hasTxn ? desc.split(" (Txn ID: ")[0] : desc,
-            transactionId: hasTxn ? desc.split(" (Txn ID: ")[1].replace(")", "") : "",
+            notes: rawNotes === "Boss Deposit" ? "" : rawNotes,
+            transactionId: hasTxn ? desc.split(" (Txn ID: ")[1]?.replace(")", "") || "" : "",
             reason: deposit.editReason || "",
             paymentMethod: deposit.paymentMethod || "Cash"
         });
@@ -493,7 +496,7 @@ return (
                                     return (
                                         <div key={isActiveGroup ? 'active' : 'inactive'}>
                                             {/* Group Header */}
-                                            <div className={`flex items-center border-y border-gray-200 bg-gray-100 px-4 py-2 ${isActiveGroup ? 'mt-2' : 'mt-4'}`}>
+                                            <div className={`flex items-center border-y border-gray-200 bg-gray-100 px-0.5 py-2 ${isActiveGroup ? 'mt-2' : 'mt-4'}`}>
                                                 <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">
                                                     {isActiveGroup ? "Active worker ledger" : "Inactive workers"}
                                                 </span>
@@ -506,7 +509,7 @@ return (
                                                     <div 
                                                         key={worker._id} 
                                                         onClick={() => navigate(`/worker/${worker._id}`, { state: { workerName: worker.name, totalAdvance: worker.totalAdvance, isActive: worker.isActive !== false } })} 
-                                                        className="bg-white border-b border-gray-100 py-2 flex justify-between items-center active:bg-gray-50 px-4 cursor-pointer transition-colors"
+                                                        className="bg-white border-b border-gray-100 py-2 flex justify-between items-center active:bg-gray-50 px-0.5 cursor-pointer transition-colors"
                                                     >
                                                         <div className="flex items-center gap-3">
                                                             <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ${isActiveGroup ? 'bg-gray-200 text-gray-700' : 'bg-gray-100 text-gray-400'}`}>
@@ -547,24 +550,6 @@ return (
                             )}
                         </div>
                             
-
-                        {/* 4. The Sticky "LOG ADVANCE" Button */}
-                            <button 
-                                onClick={() => {
-                                    setSelectedWorkerId("");
-                                    setAdvanceAmount("");
-                                    setAdvanceNotes("");
-                                    setEntryDate(dayjs().format('YYYY-MM-DD'));
-                                    setEntryTime(dayjs().format('HH:mm'));
-                                    setAdvancePaymentMethod('Cash');
-                                    setIsWorkerDropdownOpen(false);
-                                    setShowWorkerModal(true);
-                                }}
-                                className="fixed z-20 flex items-center gap-1.5 font-bold text-white text-[13px] tracking-wide bg-[#9D0052]"
-                                style={{ bottom: 84, right: 16, borderRadius: 999, padding: "11px 18px", boxShadow: "0 3px 10px rgba(157,0,82,0.45)" }}
-                                >
-                                <Plus className='w-4 h-4'/>LOG ADVANCE
-                            </button>
                     </div>
                 ) : (
                     
@@ -592,7 +577,7 @@ return (
                                             <div className="overflow-hidden w-full">
                                                 <div className="flex items-center gap-1.5 flex-wrap">
                                                     <p className="font-bold text-gray-900 text-[14px] truncate leading-tight">
-                                                        {deposit.description ? deposit.description.split(' (Txn ID:')[0] : "Boss Deposit"}
+                                                        {(deposit.description ? deposit.description.split(' (Txn ID:')[0].trim() : "") || "Boss Deposit"}
                                                     </p>
                                                     <span className="shrink-0 rounded bg-green-50 border border-green-200 px-1.5 py-0.5 text-[9px] font-bold text-[#0E793C] uppercase">
                                                         {deposit.paymentMethod || 'Cash'}
@@ -633,23 +618,48 @@ return (
                             )}
                         </div>
 
-                        {/* 4. The Sticky "LOG DEPOSIT ₹" Button */}
-                            <button 
-                                onClick={() => {
-                                    setBossEditId(null);
-                                    setBossFormData({ amount: '', notes: '', transactionId: '', reason: '', paymentMethod: 'Cash' });
-                                    setEntryDate(dayjs().format('YYYY-MM-DD'));
-                                    setEntryTime(dayjs().format('HH:mm'));
-                                    setShowBossModal(true);}}
-                                className="fixed z-20 flex items-center gap-1.5 font-bold text-white text-[13px] tracking-wide bg-[#0E793C]"
-                                style={{ bottom: 84, right: 16, borderRadius: 999, padding: "11px 18px", boxShadow: "0 3px 10px rgba(14,121,60,0.45)" }}
-                                >
-                                <Plus className="w-4 h-4" />LOG DEPOSIT
-                            </button>
-                        </div>
-                )}
-            </div>
-        </div>
+                                </div>
+                        )}
+                    </div>
+                </div>
+
+
+                            {/* 🌟 4. UNIFIED FLOATING ACTION BUTTON (Locked in place, never scrolls!) */}
+                                {(!showWorkerModal && !showBossModal && !showExportModal) && (
+                                    <button
+                                        onClick={() => {
+                                            setEntryDate(dayjs().format('YYYY-MM-DD'));
+                                            setEntryTime(dayjs().format('HH:mm'));
+                                            if (activeTab === 'workers') {
+                                                setSelectedWorkerId("");
+                                                setAdvanceAmount("");
+                                                setAdvanceNotes("");
+                                                setAdvancePaymentMethod('Cash');
+                                                setIsWorkerDropdownOpen(false);
+                                                setShowWorkerModal(true);
+                                            } else {
+                                                setBossEditId(null);
+                                                setBossFormData({ amount: '', notes: '', transactionId: '', reason: '', paymentMethod: 'Cash' });
+                                                setShowBossModal(true);
+                                            }
+                                        }}
+                                        className={`fixed z-30 flex items-center gap-1.5 font-bold text-white text-[13px] tracking-wide transition-colors duration-200 active:scale-95 ${
+                                            activeTab === 'workers' ? 'bg-[#9D0052]' : 'bg-[#0E793C]'
+                                        }`}
+                                        style={{
+                                            bottom: 84,
+                                            right: 16,
+                                            borderRadius: 999,
+                                            padding: "11px 18px",
+                                            boxShadow: activeTab === 'workers'
+                                                ? "0 3px 10px rgba(157,0,82,0.45)"
+                                                : "0 3px 10px rgba(14,121,60,0.45)"
+                                        }}
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                        {activeTab === 'workers' ? 'LOG ADVANCE' : 'LOG DEPOSIT'}
+                                    </button>
+                                )}
 
             
             {/* 🌟 UNIFIED UNIVERSAL BOTTOM SHEET (Advances & Deposits) */}
@@ -765,19 +775,43 @@ return (
                                     <textarea value={showWorkerModal ? advanceNotes : bossFormData.notes} onChange={(e) => showWorkerModal ? setAdvanceNotes(e.target.value) : setBossFormData({...bossFormData, notes: e.target.value})} rows={2} placeholder="Add details..." className="flex-1 text-sm text-gray-800 outline-none resize-none placeholder-gray-400 bg-transparent" />
                                 </div>
 
-                                {bossEditId && !showWorkerModal && (
-                                    <div className="mb-5">
+                               {bossEditId && !showWorkerModal && (
+                                    <div className="mb-5 relative">
                                         <label className="block text-[11px] font-bold text-[#0E793C] uppercase tracking-widest mb-1">Reason for Edit *</label>
-                                        <div className="border-2 border-[#0E793C]/20 rounded-lg px-3 py-2.5 flex items-center gap-2 bg-green-50/30 focus-within:border-[#0E793C]">
-                                            <select value={bossFormData.reason} onChange={(e) => setBossFormData({...bossFormData, reason: e.target.value})} className="flex-1 text-sm font-semibold text-gray-900 outline-none appearance-none bg-transparent">
-                                                <option value="" disabled>Select a reason...</option>
-                                                {EDIT_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
-                                            </select>
-                                            <ChevronDown className="w-4 h-4 text-[#0E793C] shrink-0" />
-                                        </div>
+                                        
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsReasonDropdownOpen(!isReasonDropdownOpen)}
+                                            className="w-full border-2 border-[#0E793C]/20 rounded-lg px-3 py-2.5 flex items-center justify-between bg-green-50/30 focus:border-[#0E793C] text-sm font-semibold text-gray-900"
+                                        >
+                                            <span className={bossFormData.reason ? "text-gray-900" : "text-gray-400"}>
+                                                {bossFormData.reason || "Select a reason..."}
+                                            </span>
+                                            <ChevronDown className={`w-4 h-4 text-[#0E793C] shrink-0 transition-transform ${isReasonDropdownOpen ? 'rotate-180' : ''}`} />
+                                        </button>
+
+                                        {isReasonDropdownOpen && (
+                                            <div className="absolute bottom-full left-0 mb-1.5 z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto py-1">
+                                                {EDIT_REASONS.map((r) => (
+                                                    <button
+                                                        key={r}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setBossFormData({ ...bossFormData, reason: r });
+                                                            setIsReasonDropdownOpen(false);
+                                                        }}
+                                                        className={`block w-full text-left px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                                                            bossFormData.reason === r ? 'bg-green-50 text-[#0E793C] font-bold' : 'text-gray-700 hover:bg-gray-50'
+                                                        }`}
+                                                    >
+                                                        {r}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
-                            </form>
+                                </form>
                         </div>
 
                     

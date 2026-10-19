@@ -43,7 +43,7 @@ import autoTable from 'jspdf-autotable';
 
 
 export default function Expenses () {
-  const [currentMonth, setCurrentMonth] = useState(new dayjs());
+  const [currentMonth, setCurrentMonth] = useState(dayjs());
   const navigate = useNavigate();
   const location = useLocation();
   const slideClass = location.state?.slideDirection === 'left' ? 'animate-slide-in-left' : location.state?.slideDirection === 'right' ? 'animate-slide-in-right' : 'animate-fade-in-fast'
@@ -69,6 +69,8 @@ export default function Expenses () {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editId, setEditId] = useState(null); 
   const [fReason, setFReason] = useState(""); 
+  const [isReasonDropdownOpen, setIsReasonDropdownOpen] = useState(false);
+  const [isCatDropdownOpen, setIsCatDropdownOpen] = useState(false);
 
   // ⚡ 1. SWR Instant Fetch (Grabs data and the mutate refresh tool)
   const { data: rawLedgerData = [], isLoading, mutate } = useSWR('/ledger', fetcher);
@@ -332,7 +334,7 @@ const handleSave = async () => {
         <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Amount (₹)</label>
         <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 mb-3 focus-within:border-[#9D0052]">
           <IndianRupee className="w-5 h-5 text-[#9D0052] shrink-0" />
-          <input type="number" placeholder="0" value={fAmount} onChange={(e) => setFAmount(e.target.value)} autoFocus className="flex-1 text-2xl font-extrabold text-gray-900 outline-none placeholder-gray-300 bg-transparent w-full" />
+          <input type="number" placeholder="0" value={fAmount} onChange={(e) => setFAmount(e.target.value)} className="flex-1 text-2xl font-extrabold text-gray-900 outline-none placeholder-gray-300 bg-transparent w-full" />
         </div>
 
         <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Payment Method</label>
@@ -382,15 +384,41 @@ const handleSave = async () => {
 
         {/* 2. DYNAMIC REASON DROPDOWN (ONLY SHOWS IF EDITING) */}
         {editId && (
-          <div className="mb-5">
+          <div className="mb-5 relative">
             <label className="block text-[11px] font-bold text-[#9D0052] uppercase tracking-widest mb-1">Reason for Edit *</label>
-            <div className="border-2 border-[#9D0052]/20 rounded-lg px-3 py-2.5 flex items-center gap-2 bg-pink-50/30 focus-within:border-[#9D0052]">
-              <select value={fReason} onChange={(e) => setFReason(e.target.value)} className="flex-1 text-sm font-semibold text-gray-900 outline-none appearance-none bg-transparent">
-                <option value="" disabled>Select a reason...</option>
-                {EDIT_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
-              <ChevronDown className="w-4 h-4 text-[#9D0052] shrink-0" />
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setIsReasonDropdownOpen(!isReasonDropdownOpen);
+                setIsCatDropdownOpen(false);
+              }}
+              className="w-full border-2 border-[#9D0052]/20 rounded-lg px-3 py-2.5 flex items-center justify-between bg-pink-50/30 focus:border-[#9D0052] text-sm font-semibold text-gray-900"
+            >
+              <span className={fReason ? "text-gray-900" : "text-gray-400"}>
+                {fReason || "Select a reason..."}
+              </span>
+              <ChevronDown className={`w-4 h-4 text-[#9D0052] shrink-0 transition-transform ${isReasonDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isReasonDropdownOpen && (
+              <div className="absolute bottom-full left-0 mb-1.5 z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto py-1">
+                {EDIT_REASONS.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => {
+                      setFReason(r);
+                      setIsReasonDropdownOpen(false);
+                    }}
+                    className={`block w-full text-left px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                      fReason === r ? 'bg-pink-50 text-[#9D0052] font-bold' : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

@@ -245,7 +245,7 @@ const hasUnsavedChanges = norm(originalStatuses) !== norm(workerStatuses);
                 {/* 🚨 ADD NEW WORKER button */}
                 <div className="fixed bottom-15 left-1 right-1 z-40 max-w-3xl mx-auto">
                 <button 
-                    onClick={() => navigate('/add-worker')}
+                    onClick={() => navigate('/pick-contact', { state: { slideDirection: 'left' } })}
                     className="w-full bg-green-700 hover:bg-green-800 text-white font-extrabold text-[15px] py-3 rounded-xl shadow-lg active:scale-[0.98] transition tracking-wide flex justify-center items-center gap-2"
                 >
                     <UserPlus size={20} /> ADD NEW WORKER
