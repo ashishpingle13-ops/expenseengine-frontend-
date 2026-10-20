@@ -206,20 +206,21 @@ const CashbookPage = () => {
 
     const triggerUpiPayment = (amount, note) => {
     const workerObj = workers.find(w => (w._id || w.id) === selectedWorkerId);
+        
+        // Use their saved UPI ID, or fallback to phone@ybl
         const workerUpiId = workerObj?.upiId || (workerObj?.phoneNumber ? `${workerObj.phoneNumber}@ybl` : "merchant@upi");
         const workerName = encodeURIComponent(workerObj?.name || 'Worker');
-        const cleanNote = encodeURIComponent(note || 'Advance');
+        const cleanNote = encodeURIComponent(note || 'Worker Advance');
 
-        // 1. Format amount to 2 decimal places (Required by strict UPI specs, e.g., "500.00")
-        const formattedAmount = Number(amount).toFixed(2);
+        // 1. Copy the amount to clipboard automatically so Dad can just paste it easily!
+        navigator.clipboard.writeText(amount.toString()).catch(() => {});
 
-        // 2. Generate a unique Transaction Reference ID (tr) - required when 'am' is present!
-        const txnRef = `EXP${Date.now()}`;
-
-        // 3. Construct full UPI 2.0 Intent URL (with tr, mc=0000, and mode=02)
-        // const upiUrl = `upi://pay?pa=${workerUpiId}&pn=${workerName}&am=${formattedAmount}&cu=INR&tn=${cleanNote}&tr=${txnRef}&mc=0000&mode=02`;
-        const paytmUrl = `intent://pay?pa=${workerUpiId}&pn=${workerName}&am=${formattedAmount}&cu=INR&tn=${cleanNote}&tr=${txnRef}#Intent;scheme=upi;package=net.one97.paytm;end`;
-        window.location.href =paytmUrl;
+        // 2. Launch UPI app WITHOUT the locked 'am=' parameter (This completely bypasses the NPCI risk block!)
+        const upiUrl = `upi://pay?pa=${workerUpiId}&pn=${workerName}&tn=${cleanNote}&cu=INR`;
+        
+        toast.success(`₹${amount} copied to clipboard! Paste it in the payment app.`, { duration: 4000 });
+        
+        window.location.href = upiUrl;
     };
 
     const handleBossSubmit = async (e) => {
