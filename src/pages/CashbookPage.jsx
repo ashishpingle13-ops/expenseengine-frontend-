@@ -134,6 +134,10 @@ const CashbookPage = () => {
 
         // If Online is selected and we aren't already waiting for confirmation
         if (advancePaymentMethod === 'Online' && !isWaitingForUpi && !isUpiRedirecting) {
+            const savedId = workerObj?.upiId || localStorage.getItem(`upi_${selectedWorkerId}`) || '';
+            const upiId = (window.prompt(`UPI ID of ${workerName}`, savedId) || '').trim();
+            if (!/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(upiId)) { toast.error('Enter a valid UPI ID like name@ybl'); return; }
+            localStorage.setItem(`upi_${selectedWorkerId}`, upiId);
             // 1. Save payload data temporarily
             setPendingUpiData({
                 entryType: "Advance",
@@ -160,9 +164,10 @@ const CashbookPage = () => {
             //     setIsUpiRedirecting(false);
             //     setIsWaitingForUpi(true);
             // }, 3500);
-            navigator.clipboard.writeText(String(amountNum)).catch(() => {});
-            toast.success(`₹${amountNum} copied. Open your UPI app, pay to the worker's UPI ID, and paste the amount.`, { duration: 5000 });
+                      navigator.clipboard.writeText(String(amountNum)).catch(() => {});
+            toast.success(`₹${amountNum} copied. Paste it in the amount box.`, { duration: 5000 });
             setIsWaitingForUpi(true);
+            window.location.href = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(workerName)}&cu=INR`;
             return;
         }
 
