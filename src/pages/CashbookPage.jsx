@@ -205,7 +205,7 @@ const CashbookPage = () => {
 
 
     const triggerUpiPayment = (amount, note) => {
-    const workerObj = workers.find(w => (w._id || w.id) === selectedWorkerId);
+        const workerObj = workers.find(w => (w._id || w.id) === selectedWorkerId);
         
         // Use their saved UPI ID, or fallback to phone@ybl
         const workerUpiId = workerObj?.upiId || (workerObj?.phoneNumber ? `${workerObj.phoneNumber}@ybl` : "merchant@upi");
