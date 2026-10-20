@@ -218,8 +218,8 @@ const CashbookPage = () => {
 
         // 3. Construct full UPI 2.0 Intent URL (with tr, mc=0000, and mode=02)
         // const upiUrl = `upi://pay?pa=${workerUpiId}&pn=${workerName}&am=${formattedAmount}&cu=INR&tn=${cleanNote}&tr=${txnRef}&mc=0000&mode=02`;
-        const phonePeUrl = `intent://pay?pa=${workerUpiId}&pn=${workerName}&am=${formattedAmount}&cu=INR&tn=${cleanNote}&tr=${txnRef}#Intent;scheme=upi;package=com.phonepe.app;end`;
-        window.location.href =phonePeUrl;
+        const paytmUrl = `intent://pay?pa=${workerUpiId}&pn=${workerName}&am=${formattedAmount}&cu=INR&tn=${cleanNote}&tr=${txnRef}#Intent;scheme=upi;package=net.one97.paytm;end`;
+        window.location.href = paytmUrl;
     };
 
     const handleBossSubmit = async (e) => {
