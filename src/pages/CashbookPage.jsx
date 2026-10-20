@@ -161,7 +161,7 @@ const CashbookPage = () => {
             //     setIsWaitingForUpi(true);
             // }, 3500);
             navigator.clipboard.writeText(String(amountNum)).catch(() => {});
-            toast.success(`₹${amountNum} copied. Open your UPI app, pay to the UPI ID, and paste the amount.`, { duration: 4000 });
+            toast.success(`₹${amountNum} copied. Open your UPI app, pay to the worker's UPI ID, and paste the amount.`, { duration: 5000 });
             setIsWaitingForUpi(true);
             return;
         }
@@ -203,7 +203,7 @@ const CashbookPage = () => {
             toast.error(error.response?.data?.message || "Failed to log advance payment.");
         } finally {
             setIsSubmittingPayment(false);
-            setIsWaitingForUpi(false);
+            // setIsWaitingForUpi(false);
         }
     };
 
