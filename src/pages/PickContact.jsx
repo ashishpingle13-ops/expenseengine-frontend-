@@ -26,6 +26,18 @@ export default function PickContact() {
         }
     }, []);
 
+    // Helper to merge new contacts with existing ones without duplicates & save to localStorage
+    const mergeAndSaveContacts = (incoming) => {
+        setDeviceContacts((prev) => {
+            const map = new Map();
+            prev.forEach(c => map.set(c.phone, c));
+            incoming.forEach(c => map.set(c.phone, c));
+            const merged = Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+            localStorage.setItem('cachedDeviceContacts', JSON.stringify(merged));
+            return merged;
+        });
+    };
+
     // 1. NATIVE ANDROID APK: Grabs EVERY contact in the phone automatically!
     const loadAllNativeContacts = async () => {
         if (!Capacitor.isNativePlatform()) return;
@@ -49,16 +61,14 @@ export default function PickContact() {
 
                 if (cleanPhone.length === 10) {
                     allContacts.push({
-                        id: c.contactId || idx,
+                        id: c.contactId || `${cleanPhone}_${idx}`,
                         name: displayName || `+91 ${cleanPhone}`,
                         phone: cleanPhone
                     });
                 }
             });
 
-            // Sort alphabetically just like Khatabook
-            allContacts.sort((a, b) => a.name.localeCompare(b.name));
-            setDeviceContacts(allContacts);
+            mergeAndSaveContacts(allContacts);
         } catch (error) {
             console.error("Error loading native contacts:", error);
         } finally {
@@ -66,9 +76,8 @@ export default function PickContact() {
         }
     };
 
-    // 2. WEB BROWSER FALLBACK (When testing in Chrome before building APK)
+    // 2. WEB BROWSER & NATIVE HANDLER
     const loadContacts = async () => {
-
         if (Capacitor.isNativePlatform()) {
             return loadAllNativeContacts();
         }
@@ -76,20 +85,23 @@ export default function PickContact() {
         if ('contacts' in navigator && 'select' in navigator.contacts) {
             try {
                 setIsLoading(true);
-                const contacts = await navigator.contacts.select(['name', 'tel'], { multiple: true });
-                const formatted = contacts.map((c, idx) => ({
-                    id: idx,
-                    name: c.name?.[0] || 'Unknown',
-                    phone: (c.tel?.[0] || '').replace(/\D/g, '').slice(-10)
-                })).filter(c => c.phone.length === 10);
-                setDeviceContacts(formatted);
+                const selected = await navigator.contacts.select(['name', 'tel'], { multiple: true });
+                if (selected && selected.length > 0) {
+                    const formatted = selected.map((c, idx) => ({
+                        id: `${Date.now()}_${idx}`,
+                        name: c.name?.[0] || 'Unknown',
+                        phone: (c.tel?.[0] || '').replace(/\D/g, '').slice(-10)
+                    })).filter(c => c.phone.length === 10);
+
+                    mergeAndSaveContacts(formatted);
+                }
             } catch (error) {
                 console.log("Contact picker closed or denied:", error);
             } finally {
                 setIsLoading(false);
             }
         } else {
-            toast("Full automatic contact list works inside the Android APK!");
+            toast("Use Chrome on Android or the installed APK to pick phone contacts!");
         }
     };
 
@@ -147,37 +159,44 @@ export default function PickContact() {
                 {/* Native Device Contacts or Fallback List */}
                 {isLoading ? (
                     <p className="text-center text-gray-400 py-10 text-sm">Loading device contacts...</p>
-                ) : filteredContacts.length > 0 ? (
-                    filteredContacts.map((c) => (
-                        <div 
-                            key={c.id}
-                            onClick={() => handleSelectContact(c.name, c.phone)}
-                            className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 cursor-pointer transition"
-                        >
-                            <div className="flex items-center gap-3.5">
-                                <div className="w-11 h-11 rounded-full bg-[#1048A4] text-white flex items-center justify-center font-bold text-sm shadow-sm">
-                                    {c.name.charAt(0).toUpperCase()}
-                                </div>
-                                <div>
-                                    <p className="text-[14px] font-bold text-gray-900 leading-tight">{c.name}</p>
-                                    <p className="text-[12px] text-gray-400 font-medium mt-0.5">+91 {c.phone}</p>
-                                </div>
-                            </div>
-                            <div className="w-7 h-7 rounded-full bg-blue-50 text-[#1048A4] flex items-center justify-center font-bold text-xs">
-                                +
-                            </div>
-                        </div>
-                    ))
                 ) : (
-                    <div className="text-center py-8 px-4">
-                        <p className="text-gray-500 text-sm font-semibold mb-3">Want to import phone contacts?</p>
-                        <button 
-                            onClick={loadAllNativeContacts}
-                            className="w-full bg-[#1048A4] text-white text-sm font-bold py-3 rounded-xl shadow-md active:scale-98 transition flex items-center justify-center gap-2"
-                        >
-                            <Plus className="w-4 h-4" /> Load All Phone Contacts
-                        </button>
-                    </div>
+                    <>
+                        {filteredContacts.map((c) => (
+                            <div 
+                                key={c.phone || c.id}
+                                onClick={() => handleSelectContact(c.name, c.phone)}
+                                className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 cursor-pointer transition"
+                            >
+                                <div className="flex items-center gap-3.5">
+                                    <div className="w-11 h-11 rounded-full bg-[#1048A4] text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                                        {c.name.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div>
+                                        <p className="text-[14px] font-bold text-gray-900 leading-tight">{c.name}</p>
+                                        <p className="text-[12px] text-gray-400 font-medium mt-0.5">+91 {c.phone}</p>
+                                    </div>
+                                </div>
+                                <div className="w-7 h-7 rounded-full bg-blue-50 text-[#1048A4] flex items-center justify-center font-bold text-xs">
+                                    +
+                                </div>
+                            </div>
+                        ))}
+
+                        {/* Always show the button so you can import more contacts anytime! */}
+                        <div className="text-center py-6 px-4 bg-gray-50/50">
+                            <p className="text-gray-500 text-xs font-semibold mb-2.5">
+                                {deviceContacts.length > 0 ? "Don't see a contact here?" : "Want to import phone contacts?"}
+                            </p>
+                            <button 
+                                type="button"
+                                onClick={loadContacts}
+                                className="w-full bg-[#1048A4] text-white text-sm font-bold py-3 rounded-xl shadow-md active:scale-95 transition flex items-center justify-center gap-2"
+                            >
+                                <Plus className="w-4 h-4" /> 
+                                {deviceContacts.length > 0 ? "Import More Phone Contacts" : "Load Phone Contacts"}
+                            </button>
+                        </div>
+                    </>
                 )}
             </div>
 

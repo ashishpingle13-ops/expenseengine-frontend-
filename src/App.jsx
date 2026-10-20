@@ -12,9 +12,21 @@ import CashbookPage from "./pages/CashbookPage";
 import  Expenses  from "./pages/Expenses";
 import WorkerLedger from "./pages/WorkerLedger";
 import PickContact from "./pages/PickContact";
+import { SWRConfig } from 'swr';
+
+// This function syncs SWR cache to localStorage
+const localStorageProvider = () => {
+  const map = new Map(JSON.parse(localStorage.getItem('expenseengine-cache') || '[]'));
+  window.addEventListener('beforeunload', () => {
+    const appCache = JSON.stringify(Array.from(map.entries()));
+    localStorage.setItem('expenseengine-cache', appCache);
+  });
+  return map;
+};
 
 export default function App() {
   return (
+    <SWRConfig value={{ provider: localStorageProvider, revalidateOnFocus: false, dedupingInterval: 10000 }}>
     <BrowserRouter> 
 
     <Toaster 
@@ -46,5 +58,6 @@ export default function App() {
 
     </Routes>
     </BrowserRouter>
+    </SWRConfig>
   );
 }

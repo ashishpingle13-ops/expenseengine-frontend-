@@ -30,51 +30,6 @@ export default function AddWorker() {
         setPhone(filtered);
     };
 
-    const handlePickFromPhoneContacts = async () => {
-        // Check if browser supports the native Contact Picker API (supported on Chrome Android & Mobile Safari)
-        if ('contacts' in navigator && 'select' in navigator.contacts) {
-            try {
-                const props = ['name', 'tel'];
-                const opts = { multiple: false };
-                const selectedContacts = await navigator.contacts.select(props, opts);
-                
-                if (selectedContacts && selectedContacts.length > 0) {
-                    const contact = selectedContacts[0];
-                    const rawName = contact.name?.[0] || '';
-                    const rawTel = contact.tel?.[0] || '';
-                    
-                    // Clean up phone number (remove spaces, dashes, and country codes like +91)
-                    const cleanPhone = rawTel.replace(/\D/g, '').slice(-10); 
-                    const cleanName = rawName.replace(/[^a-zA-Z\s]/g, '');
-
-                    // Redirect to your AddWorker page with pre-filled state!
-                    navigate('/add-worker', { 
-                        state: { 
-                            initialName: cleanName, 
-                            initialPhone: cleanPhone,
-                            slideDirection: 'left' 
-                        } 
-                    });
-                }
-            } catch (error) {
-                console.log('Contact selection cancelled or not allowed:', error);
-            }
-        } else {
-            // Fallback for laptops / unsupported browsers during development
-            const mockName = prompt("Enter worker name (Dev Mode):", "Ramesh Kumar");
-            const mockPhone = prompt("Enter 10-digit phone number (Dev Mode):", "9876543210");
-            if (mockName && mockPhone) {
-                navigate('/add-worker', { 
-                    state: { 
-                        initialName: mockName.replace(/[^a-zA-Z\s]/g, ''), 
-                        initialPhone: mockPhone.replace(/\D/g, '').slice(-10),
-                        slideDirection: 'left' 
-                    } 
-                });
-            }
-        }
-    };
-
     // ─── Submit Handler ──────────────────────────────────────────
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -97,7 +52,7 @@ export default function AddWorker() {
             const payload = {
                 name: name.trim(),
                 phoneNumber: phone,
-                upiId: finalUpiId, // 💡 Send optional UPI ID
+                upiId: finalUpiId, 
                 isActive: true
             };
 

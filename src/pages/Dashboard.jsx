@@ -25,14 +25,9 @@ const Dashboard = () => {
         : new Date();
         
     const [currentDate, setCurrentDate] = useState(initialDate);
-    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-    const [selectedWorkerId, setSelectedWorkerId] = useState("");
-    const [advanceAmount, setAdvanceAmount] = useState("");
-    const [advanceNotes, setAdvanceNotes] = useState("");
-    const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
     const [loadError, setLoadError] = useState(false);
     const norm = (o) => JSON.stringify(Object.entries(o || {}).sort());
-const hasUnsavedChanges = norm(originalStatuses) !== norm(workerStatuses);
+    const hasUnsavedChanges = norm(originalStatuses) !== norm(workerStatuses);
 
     // 2. NOW WE CAN SAFELY DO MATH WITH currentDate
     const dateString = currentDate.toLocaleDateString('en-CA'); 
@@ -118,52 +113,7 @@ const hasUnsavedChanges = norm(originalStatuses) !== norm(workerStatuses);
             
             toast.error("Failed to save entries to database.");
         }
-    }
-
-    const handleSubmitAdvance = async (e) => {
-        e.preventDefault();
-
-        if(!selectedWorkerId){
-            toast.error("Please select a worker!");
-            return;
-        }
-
-        try {
-            setIsSubmittingPayment(true);
-
-            const payload = {
-                entryType: "Advance",
-                workerId: selectedWorkerId,
-                amount: Number(advanceAmount),
-                description: advanceNotes,
-                date: currentDate.toISOString()
-            };
-
-            await Promise.all([
-                api.post("/ledger", payload),
-                new Promise((resolve) => setTimeout(resolve, 800))
-            ]);
-
-            toast.success("Advance payment logged successfully!");
-
-            // 1. Reset the from back to blank
-            setSelectedWorkerId("");
-            setAdvanceAmount("");
-            setAdvanceNotes("");
-
-            // 2. Close the modal
-            setIsPaymentModalOpen(false);
-
-
-
-        } catch (error) {
-            console.error("Error logging advance:", error);
-            toast.error(error.response?.data?.message || "Failed to log advance payment.");
-        } finally{
-            setIsSubmittingPayment(false);
-        }
-        
-    }
+    };
 
   return (
     <div className={`fixed inset-0 flex flex-col bg-[#F9FAFB] overflow-hidden ${slideClass}`}>

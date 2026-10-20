@@ -1,5 +1,5 @@
 import React , {  useState, useMemo } from 'react'
-import { Search, FileText, ChevronRight, UserPlus, ChevronDown, Plus, Pencil, X, Calendar, FileSpreadsheet, FileDown, Box, Clock3, NotebookText, IndianRupee, Hash } from 'lucide-react';
+import { Search, FileText, User, UserPlus, ChevronDown, Plus, Pencil, X, Calendar, FileSpreadsheet, FileDown, Box, Clock3, NotebookText, IndianRupee, Hash } from 'lucide-react';
 import { api, fetcher } from '../lib/api';
 import toast from 'react-hot-toast';
 import BottomNav from '../components/BottomNav'
@@ -27,6 +27,7 @@ const CashbookPage = () => {
     const [showExportModal, setShowExportModal] = useState(false);
     const [pendingUpiData, setPendingUpiData] = useState(null);
 
+    const [isUpiRedirecting, setIsUpiRedirecting] = useState(false);
     const [isWaitingForUpi, setIsWaitingForUpi] = useState(false);
     
     const [isWorkerDropdownOpen, setIsWorkerDropdownOpen] = useState(false);
@@ -132,8 +133,8 @@ const CashbookPage = () => {
         const note = advanceNotes || `Advance for ${workerName}`;
 
         // If Online is selected and we aren't already waiting for confirmation
-        if (advancePaymentMethod === 'Online' && !isWaitingForUpi) {
-            // Save payload data temporarily for the confirmation popup
+        if (advancePaymentMethod === 'Online' && !isWaitingForUpi && !isUpiRedirecting) {
+            // 1. Save payload data temporarily
             setPendingUpiData({
                 entryType: "Advance",
                 workerId: selectedWorkerId,
@@ -144,8 +145,20 @@ const CashbookPage = () => {
                 workerName: workerName
             });
 
-            setIsWaitingForUpi(true);
+            // 2. Close the Log Advance bottom sheet immediately so Cashbook is behind the blur
+            setShowWorkerModal(false);
+
+            // 3. Lock the entire screen so nothing can be tapped for 3.5 seconds
+            setIsUpiRedirecting(true);
+
+            // 4. Trigger GPay / UPI deep link
             triggerUpiPayment(amountNum, note);
+
+            // 5. Wait 3.5 seconds, then unlock into the Yes/No confirmation modal
+            setTimeout(() => {
+                setIsUpiRedirecting(false);
+                setIsWaitingForUpi(true);
+            }, 3500);
             return;
         }
 
@@ -956,22 +969,38 @@ return (
                     </div>
                 </div>
             )}
-            {/* Only show BottomNav if NO modals are open */}
-            {(!showWorkerModal && !showBossModal && !showExportModal) && <BottomNav />}
+           
+            {/* Only show BottomNav if NO modals or locks are open */}
+            {(!showWorkerModal && !showBossModal && !showExportModal && !isUpiRedirecting && !isWaitingForUpi) && <BottomNav />}
 
-            {/* 🌟 FULL-SCREEN BLURRED UPI PAYMENT CONFIRMATION POPUP */}
-            {isWaitingForUpi && pendingUpiData && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+            {/* 🔒 1. 3.5-SECOND UNCLICKABLE SCREEN BLOCKER WHILE LAUNCHING GPAY */}
+            {isUpiRedirecting && (
+                <div className="fixed inset-0 bg-black/60 z-[9999] flex flex-col items-center justify-center p-6 backdrop-blur-md select-none touch-none">
+                    <div className="bg-white rounded-2xl p-6 max-w-xs w-full text-center shadow-2xl space-y-3 animate-pop-in">
+                        <div className="w-10 h-10 border-4 border-[#1048A4] border-t-transparent rounded-full animate-spin mx-auto" />
+                        <h3 className="text-sm font-extrabold text-gray-900 uppercase tracking-wide">
+                            Opening UPI App...
+                        </h3>
+                        <p className="text-xs font-medium text-gray-500 leading-relaxed">
+                            Please complete the payment of <span className="font-bold text-gray-800">₹{pendingUpiData?.amount}</span> to <span className="font-bold text-[#1048A4]">{pendingUpiData?.workerName}</span>. Do not close or navigate away.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* 🌟 2. FULL-SCREEN BLURRED UPI PAYMENT CONFIRMATION POPUP (Appears after 3.5s) */}
+            {!isUpiRedirecting && isWaitingForUpi && pendingUpiData && (
+                <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in select-none">
                     <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl p-6 relative animate-pop-in text-center space-y-4">
                         
-                        <div className="w-12 h-12 bg-blue-50 text-[#1048A4] rounded-full flex items-center justify-center mx-auto text-xl font-bold">
+                        <div className="w-12 h-12 bg-blue-50 text-[#1048A4] rounded-full flex items-center justify-center mx-auto text-xl font-bold shadow-inner">
                             ₹
                         </div>
 
                         <div>
-                            <h2 className="text-base font-extrabold text-gray-900 tracking-tight">Confirm UPI Payment</h2>
+                            <h2 className="text-base font-extrabold text-gray-900 tracking-tight">Payment Confirmation</h2>
                             <p className="text-sm font-medium text-gray-600 mt-2 leading-relaxed">
-                                Was the payment of <span className="font-bold text-[#C0392B]">₹{pendingUpiData.amount}</span> successfully transferred to <span className="font-bold text-[#1048A4]">{pendingUpiData.workerName}</span>?
+                                Please confirm if the transfer of <span className="font-bold text-[#C0392B]">₹{pendingUpiData.amount}</span> to <span className="font-bold text-[#1048A4]">{pendingUpiData.workerName}</span> was completed successfully via GPay.
                             </p>
                         </div>
 
@@ -982,11 +1011,11 @@ return (
                                 onClick={() => {
                                     setIsWaitingForUpi(false);
                                     setPendingUpiData(null);
-                                    toast("❌ Transaction cancelled.");
+                                    toast("Payment cancelled. Returned to Cashbook.");
                                 }}
                                 className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold py-3.5 rounded-xl transition active:scale-[0.98]"
                             >
-                                No, Cancel
+                                No (Cancel)
                             </button>
                             
                             {/* YES / CONFIRMED BUTTON */}
@@ -996,7 +1025,7 @@ return (
                                 onClick={handleSubmitAdvance}
                                 className="flex-1 bg-[#0E793C] hover:bg-[#0A5C2D] text-white text-sm font-bold py-3.5 rounded-xl transition active:scale-[0.98] shadow-lg"
                             >
-                                {isSubmittingPayment ? "RECORDING..." : "Yes, Record Payment"}
+                                {isSubmittingPayment ? "RECORDING..." : "Yes (Complete & Save)"}
                             </button>
                         </div>
 

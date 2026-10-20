@@ -122,14 +122,20 @@ const WorkerLedger = () => {
                     <button onClick={() => navigate(-1)} className="flex h-10 w-10 shrink-0 items-center justify-center active:scale-95 transition">
                         <ArrowLeft className="h-6 w-6" />
                     </button>
-                    <div className="flex min-w-0 flex-1 items-center gap-3">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 text-lg font-bold">
+                    
+                    {/* 💡 Tapping the header area now opens the Edit Worker page! */}
+                    <div 
+                        onClick={() => workerData && navigate('/edit-worker', { state: { worker: workerData } })}
+                        className="flex min-w-0 flex-1 items-center gap-3 cursor-pointer group active:opacity-90 transition"
+                        title="Edit Worker Profile"
+                    >
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 text-lg font-bold shadow-sm">
                             {workerName.charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                            <p className="truncate text-[17px] font-semibold leading-tight">{workerName}</p>
+                            <p className="truncate text-[17px] font-semibold leading-tight group-hover:underline">{workerName} ✏️</p>
                             <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-200 mt-0.5">
-                                {isActive ? "Active worker" : "Inactive worker"}
+                                {isActive ? "Active worker (Tap to edit)" : "Inactive worker (Tap to edit)"}
                             </p>
                         </div>
                     </div>
