@@ -205,15 +205,20 @@ const CashbookPage = () => {
 
 
     const triggerUpiPayment = (amount, note) => {
-    // Find the selected worker object from your workers array
-        const workerObj = workers.find(w => (w._id || w.id) === selectedWorkerId);
-        
-        // Use their saved UPI ID, or fallback to phone@ybl if not set
+    const workerObj = workers.find(w => (w._id || w.id) === selectedWorkerId);
         const workerUpiId = workerObj?.upiId || (workerObj?.phoneNumber ? `${workerObj.phoneNumber}@ybl` : "merchant@upi");
         const workerName = encodeURIComponent(workerObj?.name || 'Worker');
+        const cleanNote = encodeURIComponent(note || 'Advance');
 
-        // 💡 Launches GPay/PhonePe directly with the worker's personal VPA and amount pre-filled!
-        const upiUrl = `upi://pay?pa=${workerUpiId}&pn=${workerName}&am=${amount}&tn=${encodeURIComponent(note || 'Worker Advance')}&cu=INR`;
+        // 1. Format amount to 2 decimal places (Required by strict UPI specs, e.g., "500.00")
+        const formattedAmount = Number(amount).toFixed(2);
+
+        // 2. Generate a unique Transaction Reference ID (tr) - required when 'am' is present!
+        const txnRef = `EXP${Date.now()}`;
+
+        // 3. Construct full UPI 2.0 Intent URL (with tr, mc=0000, and mode=02)
+        const upiUrl = `upi://pay?pa=${workerUpiId}&pn=${workerName}&am=${formattedAmount}&cu=INR&tn=${cleanNote}&tr=${txnRef}&mc=0000&mode=02`;
+        
         window.location.href = upiUrl;
     };
 
