@@ -142,23 +142,27 @@ const CashbookPage = () => {
                 paymentMethod: "Online",
                 description: advanceNotes,
                 date: dayjs(`${entryDate}T${entryTime}`).toISOString(),
-                workerName: workerName
+                workerName: workerName,
+                upiId: workerObj?.upiId || localStorage.getItem(`upi_${selectedWorkerId}`) || ''
             });
 
             // 2. Close the Log Advance bottom sheet immediately so Cashbook is behind the blur
             setShowWorkerModal(false);
 
             // 3. Lock the entire screen so nothing can be tapped for 3.5 seconds
-            setIsUpiRedirecting(true);
+            // setIsUpiRedirecting(true);
 
-            // 4. Trigger GPay / UPI deep link
-            triggerUpiPayment(amountNum, note);
+            // // 4. Trigger GPay / UPI deep link
+            // triggerUpiPayment(amountNum, note);
 
-            // 5. Wait 3.5 seconds, then unlock into the Yes/No confirmation modal
-            setTimeout(() => {
-                setIsUpiRedirecting(false);
-                setIsWaitingForUpi(true);
-            }, 3500);
+            // // 5. Wait 3.5 seconds, then unlock into the Yes/No confirmation modal
+            // setTimeout(() => {
+            //     setIsUpiRedirecting(false);
+            //     setIsWaitingForUpi(true);
+            // }, 3500);
+            navigator.clipboard.writeText(String(amountNum)).catch(() => {});
+            toast.success(`₹${amountNum} copied. Open your UPI app, pay to the UPI ID, and paste the amount.`, { duration: 4000 });
+            setIsWaitingForUpi(true);
             return;
         }
 
