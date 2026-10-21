@@ -55,6 +55,7 @@ src/
     WorkerRow.jsx
   lib/
     api.js
+    qrUtils.js
   pages/
     Add-Worker.jsx
     CashbookPage.jsx
@@ -85,6 +86,133 @@ vite.config.js
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="src/lib/qrUtils.js">
+import jsQR from "jsqr";
+import QRCode from "qrcode";
+import { Capacitor } from "@capacitor/core";
+import { Share } from "@capacitor/share";
+import { Filesystem, Directory } from "@capacitor/filesystem";
+
+// 1. Reads a QR code image file and extracts the exact UPI string or VPA
+export const decodeUpiFromQrImage = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+
+        // Scale down huge phone screenshots to max 800px so jsQR reads them fast & accurately
+        const MAX_DIM = 800;
+        let width = img.width;
+        let height = img.height;
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          } else {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+        if (code && code.data && code.data.toLowerCase().includes("upi://pay")) {
+          // Extract the 'pa' (VPA) parameter or save the clean VPA
+          try {
+            const url = new URL(code.data);
+            const pa = url.searchParams.get("pa");
+            resolve(pa || code.data);
+          } catch {
+            resolve(code.data);
+          }
+        } else {
+          reject(new Error("No valid UPI QR code found in this image."));
+        }
+      };
+      img.onerror = () => reject(new Error("Failed to load image."));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error("Failed to read file."));
+    reader.readAsDataURL(file);
+  });
+};
+
+// 2. Generates a high-contrast QR Image DataURL with the exact amount baked in
+export const generateDynamicUpiQrDataUrl = async ({ upiId, workerName, amount, note }) => {
+  // Clean VPA if full upi:// string was stored
+  let cleanPa = upiId;
+  if (upiId.startsWith("upi://")) {
+    try {
+      const parsed = new URL(upiId);
+      cleanPa = parsed.searchParams.get("pa") || upiId;
+    } catch {}
+  }
+
+  const formattedAmount = Number(amount).toFixed(2);
+  const upiString = `upi://pay?pa=${encodeURIComponent(cleanPa)}&pn=${encodeURIComponent(
+    workerName || "Worker"
+  )}&am=${formattedAmount}&cu=INR&tn=${encodeURIComponent(note || "Worker Advance")}`;
+
+  // Generate a 600x600 crisp PNG QR code with wide white margins (vital for GPay scanner)
+  const dataUrl = await QRCode.toDataURL(upiString, {
+    width: 600,
+    margin: 4,
+    color: {
+      dark: "#000000",
+      light: "#FFFFFF",
+    },
+  });
+
+  return { dataUrl, upiString, cleanPa };
+};
+
+// 3. Shares the generated QR image directly to Google Pay / PhonePe on Android
+export const shareQrImageToUpiApp = async (dataUrl, workerName, amount) => {
+  // Copy amount to clipboard as an extra safety net
+  try {
+    await navigator.clipboard.writeText(String(amount));
+  } catch {}
+
+  if (Capacitor.isNativePlatform()) {
+    // Native Android APK: Write temp PNG to cache and open native Android Share Sheet
+    const base64Data = dataUrl.split(",")[1];
+    const fileName = `upi_qr_${Date.now()}.png`;
+
+    const savedFile = await Filesystem.writeFile({
+      path: fileName,
+      data: base64Data,
+      directory: Directory.Cache,
+    });
+
+    await Share.share({
+      title: `Pay ₹${amount} to ${workerName}`,
+      text: `Scan with Google Pay or PhonePe to pay ₹${amount} to ${workerName}`,
+      url: savedFile.uri,
+      dialogTitle: "Select Google Pay / PhonePe to Scan QR",
+    });
+  } else if (navigator.canShare) {
+    // Mobile Chrome Web Fallback
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    const file = new File([blob], "payment_qr.png", { type: "image/png" });
+    if (navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        title: `Pay ₹${amount} to ${workerName}`,
+        files: [file],
+      });
+    }
+  }
+};
+</file>
 
 <file path="public/favicon.svg">
 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="46" fill="none" viewBox="0 0 48 46"><path fill="#863bff" d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" style="fill:#863bff;fill:color(display-p3 .5252 .23 1);fill-opacity:1"/><mask id="a" width="48" height="46" x="0" y="0" maskUnits="userSpaceOnUse" style="mask-type:alpha"><path fill="#000" d="M25.842 44.938c-.664.844-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.183c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.498 0-3.579-1.842-3.579H1.133c-.92 0-1.456-1.04-.92-1.787L9.91.473c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.578 1.842 3.578h11.377c.943 0 1.473 1.088.89 1.832L25.843 44.94z" style="fill:#000;fill-opacity:1"/></mask><g mask="url(#a)"><g filter="url(#b)"><ellipse cx="5.508" cy="14.704" fill="#ede6ff" rx="5.508" ry="14.704" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -4.47 31.516)"/></g><g filter="url(#c)"><ellipse cx="10.399" cy="29.851" fill="#ede6ff" rx="10.399" ry="29.851" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -39.328 7.883)"/></g><g filter="url(#d)"><ellipse cx="5.508" cy="30.487" fill="#7e14ff" rx="5.508" ry="30.487" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.814 -25.913 -14.639)scale(1 -1)"/></g><g filter="url(#e)"><ellipse cx="5.508" cy="30.599" fill="#7e14ff" rx="5.508" ry="30.599" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.814 -32.644 -3.334)scale(1 -1)"/></g><g filter="url(#f)"><ellipse cx="5.508" cy="30.599" fill="#7e14ff" rx="5.508" ry="30.599" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -34.34 30.47)"/></g><g filter="url(#g)"><ellipse cx="14.072" cy="22.078" fill="#ede6ff" rx="14.072" ry="22.078" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="rotate(93.35 24.506 48.493)scale(-1 1)"/></g><g filter="url(#h)"><ellipse cx="3.47" cy="21.501" fill="#7e14ff" rx="3.47" ry="21.501" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.009 28.708 47.59)scale(-1 1)"/></g><g filter="url(#i)"><ellipse cx="3.47" cy="21.501" fill="#7e14ff" rx="3.47" ry="21.501" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.009 28.708 47.59)scale(-1 1)"/></g><g filter="url(#j)"><ellipse cx=".387" cy="8.972" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(39.51 .387 8.972)"/></g><g filter="url(#k)"><ellipse cx="47.523" cy="-6.092" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 47.523 -6.092)"/></g><g filter="url(#l)"><ellipse cx="41.412" cy="6.333" fill="#47bfff" rx="5.971" ry="9.665" style="fill:#47bfff;fill:color(display-p3 .2799 .748 1);fill-opacity:1" transform="rotate(37.892 41.412 6.333)"/></g><g filter="url(#m)"><ellipse cx="-1.879" cy="38.332" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 -1.88 38.332)"/></g><g filter="url(#n)"><ellipse cx="-1.879" cy="38.332" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 -1.88 38.332)"/></g><g filter="url(#o)"><ellipse cx="35.651" cy="29.907" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 35.651 29.907)"/></g><g filter="url(#p)"><ellipse cx="38.418" cy="32.4" fill="#47bfff" rx="5.971" ry="15.297" style="fill:#47bfff;fill:color(display-p3 .2799 .748 1);fill-opacity:1" transform="rotate(37.892 38.418 32.4)"/></g></g><defs><filter id="b" width="60.045" height="41.654" x="-19.77" y="16.149" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="c" width="90.34" height="51.437" x="-54.613" y="-7.533" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="d" width="79.355" height="29.4" x="-49.64" y="2.03" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="e" width="79.579" height="29.4" x="-45.045" y="20.029" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="f" width="79.579" height="29.4" x="-43.513" y="21.178" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="g" width="74.749" height="58.852" x="15.756" y="-17.901" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="h" width="61.377" height="25.362" x="23.548" y="2.284" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="i" width="61.377" height="25.362" x="23.548" y="2.284" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="j" width="56.045" height="63.649" x="-27.636" y="-22.853" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="k" width="54.814" height="64.646" x="20.116" y="-38.415" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="l" width="33.541" height="35.313" x="24.641" y="-11.323" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="m" width="54.814" height="64.646" x="-29.286" y="6.009" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="n" width="54.814" height="64.646" x="-29.286" y="6.009" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="o" width="54.814" height="64.646" x="8.244" y="-2.416" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="p" width="39.409" height="43.623" x="18.713" y="10.588" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter></defs></svg>
@@ -444,239 +572,6 @@ export const DateSelectorPage = () => {
 };
 
 export default DateSelectorPage;
-</file>
-
-<file path="src/pages/EditWorker.jsx">
-import React, { useEffect, useState, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { api } from '../lib/api';
-import { ArrowLeft, User, Phone, AtSign, Camera, Trash2, UserCheck, ChevronRight } from 'lucide-react';
-import toast, { Toaster } from "react-hot-toast";
-import { mutate } from 'swr';
-
-const EditWorker = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const fileInputRef = useRef(null);
-
-  const workerToEdit = location.state?.worker;
-  const workerId = workerToEdit?._id || workerToEdit?.id;
-
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [upiId, setUpiId] = useState("");
-  const [photoPreview, setPhotoPreview] = useState(null);
-  const [isActive, setIsActive] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  useEffect(() => {
-    if (workerToEdit) {
-      setName(workerToEdit.name || '');
-      setPhone(workerToEdit.phoneNumber || "");
-      setUpiId(workerToEdit.upiId || "");
-      setIsActive(workerToEdit.isActive !== false);
-    } else {
-      toast.error("No worker selected!");
-      navigate('/dashboard');
-    }
-  }, [workerToEdit, navigate]);
-
-  const handlePhotoUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      // Create a local preview URL for the selected image
-      const previewUrl = URL.createObjectURL(file);
-      setPhotoPreview(previewUrl);
-      toast.success("Photo attached! (Save to upload)");
-      // Note: To fully save to MongoDB, you'd upload this file to Firebase Storage/AWS S3 and save the URL.
-    }
-  };
-
-  const handleUpdate = async () => {
-    try {
-      setIsSaving(true);
-      
-      // Pass upiId along with name and phone
-      await api.put(`/workers/${workerId}`, { 
-          name, 
-          phoneNumber: phone, 
-          upiId, 
-          isActive 
-      });
-      
-      mutate('/workers');
-      mutate('/workers?includeInactive=true');
-      toast.success("Profile saved!");
-      navigate(-1);
-    } catch (error) {
-      console.error("Error updating worker:", error);
-      toast.error("Failed to save profile.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleToggleStatus = async () => {
-    try {
-      setIsDeleting(true);
-      const newStatus = !isActive;
-      
-      await api.put(`/workers/${workerId}`, { name, phoneNumber: phone, upiId, isActive: newStatus });
-      
-      mutate('/workers');
-      mutate('/workers?includeInactive=true');
-      toast.success(`Worker ${newStatus ? 'reactivated' : 'deactivated'}!`);
-      setTimeout(() => navigate('/dashboard'), 500);
-    } catch (error) {
-      toast.error('Error updating worker status');
-      setIsDeleting(false);
-    }
-  };
-
-  return (
-    <div className='fixed inset-0 flex flex-col bg-gray-50 overflow-hidden font-sans z-50 animate-slide-in-right'>
-      <Toaster position="top-center" />
-
-      {/* 1. Khatabook Style Blue Header */}
-      <header className='bg-[#1048A4] text-white px-4 py-4 flex items-center justify-between shrink-0 shadow-sm z-10'>
-        <div className='flex items-center gap-4'>
-          <button onClick={() => navigate(-1)} className='active:scale-95 transition p-1'>
-            <ArrowLeft size={24} />
-          </button>
-          <h1 className='text-[18px] font-semibold tracking-wide'>Worker Profile</h1>
-        </div>
-        <button 
-            onClick={handleUpdate}
-            disabled={isSaving}
-            className='text-sm font-bold uppercase tracking-wider bg-white/20 px-3 py-1.5 rounded active:bg-white/30 transition disabled:opacity-50'
-        >
-            {isSaving ? "Saving..." : "Save"}
-        </button>
-      </header>
-
-      <div className='flex-1 overflow-y-auto pb-24'>
-        
-        {/* 2. Photo Upload Section */}
-        <div className='bg-gray-50 flex flex-col items-center py-8 border-b border-gray-200'>
-          <div className='relative'>
-            {/* Avatar Circle */}
-            <div className='w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center text-gray-400 overflow-hidden border-2 border-white shadow-sm'>
-              {photoPreview ? (
-                <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
-              ) : (
-                <User size={48} className="text-gray-400" />
-              )}
-            </div>
-            
-            {/* Camera Icon Badge */}
-            <button 
-                onClick={() => fileInputRef.current?.click()}
-                className='absolute bottom-0 right-0 bg-[#1048A4] p-2 rounded-full text-white border-2 border-white shadow-md active:scale-95 transition'
-            >
-              <Camera size={14} />
-            </button>
-          </div>
-          
-          {/* Hidden File Input (Opens Camera/Gallery natively on mobile) */}
-          <input 
-              type="file" 
-              accept="image/*" 
-              ref={fileInputRef} 
-              onChange={handlePhotoUpload} 
-              className="hidden" 
-          />
-          
-          <button 
-              onClick={() => fileInputRef.current?.click()}
-              className='text-[#1048A4] text-sm font-semibold mt-3'
-          >
-              Add photo
-          </button>
-        </div>
-
-        {/* 3. Editable Fields List */}
-        <div className='bg-white border-b border-gray-200'>
-          
-          {/* Name Row */}
-          <div className='flex items-center px-4 py-3 border-b border-gray-100 group'>
-            <User className='w-5 h-5 text-gray-400 shrink-0 mr-4' />
-            <div className='flex-1 min-w-0'>
-              <label className='text-[11px] text-gray-500 font-medium'>Name</label>
-              <input 
-                  type="text" 
-                  value={name} 
-                  onChange={(e) => setName(e.target.value)} 
-                  className='w-full text-[15px] font-semibold text-gray-900 outline-none bg-transparent pb-1 placeholder-gray-300' 
-              />
-            </div>
-            <ChevronRight className='w-4 h-4 text-gray-300' />
-          </div>
-
-          {/* Phone Row */}
-          <div className='flex items-center px-4 py-3 border-b border-gray-100'>
-            <Phone className='w-5 h-5 text-gray-400 shrink-0 mr-4' />
-            <div className='flex-1 min-w-0'>
-              <label className='text-[11px] text-gray-500 font-medium'>Mobile Number</label>
-              <input 
-                  type="tel" 
-                  value={phone} 
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} 
-                  className='w-full text-[15px] font-semibold text-gray-900 outline-none bg-transparent pb-1 placeholder-gray-300' 
-              />
-            </div>
-            <ChevronRight className='w-4 h-4 text-gray-300' />
-          </div>
-
-          {/* UPI ID Row */}
-          <div className='flex items-center px-4 py-3'>
-            <AtSign className='w-5 h-5 text-gray-400 shrink-0 mr-4' />
-            <div className='flex-1 min-w-0'>
-              <label className='text-[11px] text-gray-500 font-medium'>UPI ID (Optional)</label>
-              <input 
-                  type="text" 
-                  value={upiId} 
-                  placeholder="e.g. 9876543210@ybl"
-                  onChange={(e) => setUpiId(e.target.value.trim().toLowerCase())} 
-                  className='w-full text-[15px] font-semibold text-gray-900 outline-none bg-transparent pb-1 placeholder-gray-300' 
-              />
-            </div>
-            <ChevronRight className='w-4 h-4 text-gray-300' />
-          </div>
-
-        </div>
-
-        {/* 4. Deactivate Button (Matches Khatabook red outline style) */}
-        <div className='mt-8 px-4'>
-            <p className="text-[11px] text-gray-400 font-semibold mb-2 ml-1 uppercase tracking-wider">Worker Settings</p>
-            <button
-                type='button'
-                disabled={isDeleting}
-                onClick={handleToggleStatus}
-                className={`w-full py-3.5 rounded-lg border flex items-center justify-center gap-2 text-sm font-bold transition active:scale-[0.98] disabled:opacity-50 ${
-                    isActive 
-                        ? 'border-red-500 text-red-600 bg-white hover:bg-red-50' 
-                        : 'border-green-600 text-green-700 bg-white hover:bg-green-50'
-                }`}
-            >
-                {isDeleting ? "Updating..." : isActive ? (
-                    <>
-                        <Trash2 size={18} /> DEACTIVATE WORKER
-                    </>
-                ) : (
-                    <>
-                        <UserCheck size={18} /> REACTIVATE WORKER
-                    </>
-                )}
-            </button>
-        </div>
-
-      </div>
-    </div>
-  );
-};
-
-export default EditWorker;
 </file>
 
 <file path="src/pages/Login.jsx">
@@ -1909,6 +1804,264 @@ export default defineConfig({
 })
 </file>
 
+<file path="src/pages/EditWorker.jsx">
+import React, { useEffect, useState, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { api } from '../lib/api';
+import { ArrowLeft, User, Phone, AtSign, Camera, Trash2, UserCheck, ChevronRight, QrCode } from 'lucide-react';
+import { decodeUpiFromQrImage } from '../lib/qrUtils';
+import toast, { Toaster } from "react-hot-toast";
+import { mutate } from 'swr';
+
+const EditWorker = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const fileInputRef = useRef(null);
+
+  const workerToEdit = location.state?.worker;
+  const workerId = workerToEdit?._id || workerToEdit?.id;
+
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [upiId, setUpiId] = useState("");
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [isActive, setIsActive] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    if (workerToEdit) {
+      setName(workerToEdit.name || '');
+      setPhone(workerToEdit.phoneNumber || "");
+      setUpiId(workerToEdit.upiId || "");
+      setIsActive(workerToEdit.isActive !== false);
+    } else {
+      toast.error("No worker selected!");
+      navigate('/dashboard');
+    }
+  }, [workerToEdit, navigate]);
+
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Create a local preview URL for the selected image
+      const previewUrl = URL.createObjectURL(file);
+      setPhotoPreview(previewUrl);
+      toast.success("Photo attached! (Save to upload)");
+      // Note: To fully save to MongoDB, you'd upload this file to Firebase Storage/AWS S3 and save the URL.
+    }
+  };
+
+  const handleUpdate = async () => {
+  if (!name.trim()) return toast.error("Worker name cannot be empty!");
+  if (phone.length !== 10) return toast.error("Phone number must be 10 digits!");
+
+  try {
+    setIsSaving(true);
+
+    // Pass upiId along with name and phone
+    await api.put(`/workers/${workerId}`, { 
+        name: name.trim(), 
+        phoneNumber: phone, 
+        upiId, 
+        isActive 
+    });
+
+    mutate('/workers');
+    mutate('/workers?includeInactive=true');
+    mutate(`/workers/${workerId}`); // 💡 Immediately updates WorkerLedger header!
+    toast.success("Profile saved!");
+    navigate(-1);
+    } catch (error) {
+      console.error("Error updating worker:", error);
+      toast.error("Failed to save profile.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleStatus = async () => {
+    try {
+      setIsDeleting(true);
+      const newStatus = !isActive;
+      
+      await api.put(`/workers/${workerId}`, { name, phoneNumber: phone, upiId, isActive: newStatus });
+      
+      mutate('/workers');
+      mutate('/workers?includeInactive=true');
+      mutate(`/workers/${workerId}`);
+      toast.success(`Worker ${newStatus ? 'reactivated' : 'deactivated'}!`);
+      setTimeout(() => navigate('/dashboard'), 500);
+    } catch (error) {
+      toast.error('Error updating worker status');
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <div className='fixed inset-0 flex flex-col bg-gray-50 overflow-hidden font-sans z-50 animate-slide-in-right'>
+      <Toaster position="top-center" />
+
+      {/* 1. Khatabook Style Blue Header */}
+      <header className='bg-[#1048A4] text-white px-4 py-4 flex items-center justify-between shrink-0 shadow-sm z-10'>
+        <div className='flex items-center gap-4'>
+          <button onClick={() => navigate(-1)} className='active:scale-95 transition p-1'>
+            <ArrowLeft size={24} />
+          </button>
+          <h1 className='text-[18px] font-semibold tracking-wide'>Worker Profile</h1>
+        </div>
+        <button 
+            onClick={handleUpdate}
+            disabled={isSaving}
+            className='text-sm font-bold uppercase tracking-wider bg-white/20 px-3 py-1.5 rounded active:bg-white/30 transition disabled:opacity-50'
+        >
+            {isSaving ? "Saving..." : "Save"}
+        </button>
+      </header>
+
+      <div className='flex-1 overflow-y-auto pb-24'>
+        
+        {/* 2. Photo Upload Section */}
+        <div className='bg-gray-50 flex flex-col items-center py-8 border-b border-gray-200'>
+          <div className='relative'>
+            {/* Avatar Circle */}
+            <div className='w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center text-gray-400 overflow-hidden border-2 border-white shadow-sm'>
+              {photoPreview ? (
+                <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <User size={48} className="text-gray-400" />
+              )}
+            </div>
+            
+            {/* Camera Icon Badge */}
+            <button 
+                onClick={() => fileInputRef.current?.click()}
+                className='absolute bottom-0 right-0 bg-[#1048A4] p-2 rounded-full text-white border-2 border-white shadow-md active:scale-95 transition'
+            >
+              <Camera size={14} />
+            </button>
+          </div>
+          
+          {/* Hidden File Input (Opens Camera/Gallery natively on mobile) */}
+          <input 
+              type="file" 
+              accept="image/*" 
+              ref={fileInputRef} 
+              onChange={handlePhotoUpload} 
+              className="hidden" 
+          />
+          
+          <button 
+              onClick={() => fileInputRef.current?.click()}
+              className='text-[#1048A4] text-sm font-semibold mt-3'
+          >
+              Add photo
+          </button>
+        </div>
+
+        {/* 3. Editable Fields List */}
+        <div className='bg-white border-b border-gray-200'>
+          
+          {/* Name Row */}
+          <div className='flex items-center px-4 py-3 border-b border-gray-100 group'>
+            <User className='w-5 h-5 text-gray-400 shrink-0 mr-4' />
+            <div className='flex-1 min-w-0'>
+              <label className='text-[11px] text-gray-500 font-medium'>Name</label>
+              <input 
+                  type="text" 
+                  value={name} 
+                  onChange={(e) => setName(e.target.value)} 
+                  className='w-full text-[15px] font-semibold text-gray-900 outline-none bg-transparent pb-1 placeholder-gray-300' 
+              />
+            </div>
+            <ChevronRight className='w-4 h-4 text-gray-300' />
+          </div>
+
+          {/* Phone Row */}
+          <div className='flex items-center px-4 py-3 border-b border-gray-100'>
+            <Phone className='w-5 h-5 text-gray-400 shrink-0 mr-4' />
+            <div className='flex-1 min-w-0'>
+              <label className='text-[11px] text-gray-500 font-medium'>Mobile Number</label>
+              <input 
+                  type="tel" 
+                  value={phone} 
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} 
+                  className='w-full text-[15px] font-semibold text-gray-900 outline-none bg-transparent pb-1 placeholder-gray-300' 
+              />
+            </div>
+            <ChevronRight className='w-4 h-4 text-gray-300' />
+          </div>
+
+              {/* UPI ID Row */}
+              <div className='flex items-center px-4 py-3'>
+                <AtSign className='w-5 h-5 text-gray-400 shrink-0 mr-4' />
+                <div className='flex-1 min-w-0'>
+                  <label className='text-[11px] text-gray-500 font-medium'>UPI ID (Or tap QR icon to scan image)</label>
+                  <input 
+                      type="text" 
+                      value={upiId} 
+                      placeholder="e.g. 9876543210@ybl"
+                      onChange={(e) => setUpiId(e.target.value.trim().toLowerCase())} 
+                      className='w-full text-[15px] font-semibold text-gray-900 outline-none bg-transparent pb-1 placeholder-gray-300' 
+                  />
+                </div>
+                <label className="p-2 bg-blue-50 text-[#1048A4] rounded-lg cursor-pointer active:scale-95 transition flex items-center gap-1 text-xs font-bold">
+                  <QrCode className="w-4 h-4" />
+                  <span>Scan QR</span>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const extracted = await decodeUpiFromQrImage(file);
+                        setUpiId(extracted);
+                        toast.success(`QR Decoded: ${extracted}`);
+                      } catch (err) {
+                        toast.error(err.message);
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+
+        </div>
+
+        {/* 4. Deactivate Button (Matches Khatabook red outline style) */}
+        <div className='mt-8 px-4'>
+            <p className="text-[11px] text-gray-400 font-semibold mb-2 ml-1 uppercase tracking-wider">Worker Settings</p>
+            <button
+                type='button'
+                disabled={isDeleting}
+                onClick={handleToggleStatus}
+                className={`w-full py-3.5 rounded-lg border flex items-center justify-center gap-2 text-sm font-bold transition active:scale-[0.98] disabled:opacity-50 ${
+                    isActive 
+                        ? 'border-red-500 text-red-600 bg-white hover:bg-red-50' 
+                        : 'border-green-600 text-green-700 bg-white hover:bg-green-50'
+                }`}
+            >
+                {isDeleting ? "Updating..." : isActive ? (
+                    <>
+                        <Trash2 size={18} /> DEACTIVATE WORKER
+                    </>
+                ) : (
+                    <>
+                        <UserCheck size={18} /> REACTIVATE WORKER
+                    </>
+                )}
+            </button>
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
+export default EditWorker;
+</file>
+
 <file path="src/pages/Expenses.jsx">
 import React, { useEffect, useRef, useState } from 'react'
 import { api, fetcher } from '../lib/api';
@@ -2571,6 +2724,94 @@ const handleSave = async () => {
 }
 </file>
 
+<file path="package.json">
+{
+  "name": "expenseengine-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@capacitor-community/contacts": "^8.0.0",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/share": "^8.0.3",
+    "axios": "^1.19.0",
+    "date-fns": "^4.4.0",
+    "dayjs": "^1.11.21",
+    "firebase": "^12.17.1",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
+    "jsqr": "^1.4.0",
+    "lucide-react": "^1.31.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.8",
+    "react-day-picker": "^10.0.1",
+    "react-dom": "^19.2.8",
+    "react-hot-toast": "^2.6.0",
+    "react-router-dom": "^7.18.2",
+    "swr": "^2.5.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "autoprefixer": "^10.5.4",
+    "eslint": "^10.8.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.7.0",
+    "postcss": "^8.5.26",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.2.0"
+  }
+}
+</file>
+
+<file path="src/lib/api.js">
+import axios from "axios";
+import { auth } from "../firebase";
+
+const baseURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? `http://${window.location.hostname}:5000/api` : "");
+if (!baseURL) {
+  console.error("CRITICAL: VITE_API_URL environment variable is missing in production build!");
+}
+
+export const api = axios.create({
+  baseURL,
+  headers: { "Content-Type": "application/json" },
+});
+
+api.interceptors.request.use(
+  async (config) => {
+    if (auth.currentUser) {
+      const token = await auth.currentUser.getIdToken();
+      localStorage.setItem("authToken", token);
+      config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      const token = localStorage.getItem("authToken");
+      if (token) config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+export const fetcher = (url) => api.get(url).then(res => {
+  if (typeof res.data === "string") throw new Error("Bad API URL or HTML response received");
+  return res.data;
+});
+</file>
+
 <file path="src/pages/WorkerLedger.jsx">
 import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
@@ -2696,14 +2937,20 @@ const WorkerLedger = () => {
                     <button onClick={() => navigate(-1)} className="flex h-10 w-10 shrink-0 items-center justify-center active:scale-95 transition">
                         <ArrowLeft className="h-6 w-6" />
                     </button>
-                    <div className="flex min-w-0 flex-1 items-center gap-3">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 text-lg font-bold">
+                    
+                    {/* 💡 Tapping the header area now opens the Edit Worker page! */}
+                    <div 
+                        onClick={() => workerData && navigate('/edit-worker', { state: { worker: workerData } })}
+                        className="flex min-w-0 flex-1 items-center gap-3 cursor-pointer group active:opacity-90 transition"
+                        title="Edit Worker Profile"
+                    >
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 text-lg font-bold shadow-sm">
                             {workerName.charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                            <p className="truncate text-[17px] font-semibold leading-tight">{workerName}</p>
+                            <p className="truncate text-[17px] font-semibold leading-tight group-hover:underline">{workerName} ✏️</p>
                             <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-200 mt-0.5">
-                                {isActive ? "Active worker" : "Inactive worker"}
+                                {isActive ? "Active worker (Tap to edit)" : "Inactive worker (Tap to edit)"}
                             </p>
                         </div>
                     </div>
@@ -2932,96 +3179,13 @@ const WorkerLedger = () => {
 export default WorkerLedger;
 </file>
 
-<file path="package.json">
-{
-  "name": "expenseengine-frontend",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@capacitor-community/contacts": "^8.0.0",
-    "@capacitor/cli": "^8.5.3",
-    "@capacitor/core": "^8.5.3",
-    "axios": "^1.19.0",
-    "date-fns": "^4.4.0",
-    "dayjs": "^1.11.21",
-    "firebase": "^12.17.1",
-    "jspdf": "^4.2.1",
-    "jspdf-autotable": "^5.0.8",
-    "lucide-react": "^1.31.0",
-    "react": "^19.2.8",
-    "react-day-picker": "^10.0.1",
-    "react-dom": "^19.2.8",
-    "react-hot-toast": "^2.6.0",
-    "react-router-dom": "^7.18.2",
-    "swr": "^2.5.1"
-  },
-  "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@tailwindcss/postcss": "^4.3.3",
-    "@tailwindcss/vite": "^4.3.3",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.4",
-    "autoprefixer": "^10.5.4",
-    "eslint": "^10.8.0",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.3",
-    "globals": "^17.7.0",
-    "postcss": "^8.5.26",
-    "tailwindcss": "^4.3.3",
-    "vite": "^8.2.0"
-  }
-}
-</file>
-
-<file path="src/lib/api.js">
-import axios from "axios";
-import { auth } from "../firebase";
-
-const baseURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? `http://${window.location.hostname}:5000/api` : "");
-if (!baseURL) {
-  console.error("CRITICAL: VITE_API_URL environment variable is missing in production build!");
-}
-
-export const api = axios.create({
-  baseURL,
-  headers: { "Content-Type": "application/json" },
-});
-
-api.interceptors.request.use(
-  async (config) => {
-    if (auth.currentUser) {
-      const token = await auth.currentUser.getIdToken();
-      localStorage.setItem("authToken", token);
-      config.headers.Authorization = `Bearer ${token}`;
-    } else {
-      const token = localStorage.getItem("authToken");
-      if (token) config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-export const fetcher = (url) => api.get(url).then(res => {
-  if (typeof res.data === "string") throw new Error("Bad API URL or HTML response received");
-  return res.data;
-});
-</file>
-
 <file path="src/pages/Add-Worker.jsx">
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
-import { ArrowLeft, User, Phone } from 'lucide-react';
+import { decodeUpiFromQrImage } from '../lib/qrUtils';
+import { ArrowLeft, User, Phone, QrCode } from 'lucide-react';
 import { mutate } from 'swr';
 
 export default function AddWorker() {
@@ -3034,6 +3198,7 @@ export default function AddWorker() {
     const [name, setName] = useState(location.state?.initialName || '');
     const [phone, setPhone] = useState(location.state?.initialPhone || '');
     const [upiHandle, setUpiHandle] = useState("@ybl");
+    const [scannedUpiId, setScannedUpiId] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // ─── Strict Validation Handlers ──────────────────────────────
@@ -3047,6 +3212,18 @@ export default function AddWorker() {
         // Only allow numbers and limit strictly to 10 digits
         const filtered = e.target.value.replace(/\D/g, '').slice(0, 10);
         setPhone(filtered);
+    };
+
+    const handleQrUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            const extractedUpi = await decodeUpiFromQrImage(file);
+            setScannedUpiId(extractedUpi);
+            toast.success(`Verified QR! UPI ID: ${extractedUpi}`);
+        } catch (err) {
+            toast.error(err.message || "Could not read QR code. Try a clearer image.");
+        }
     };
 
     // ─── Submit Handler ──────────────────────────────────────────
@@ -3066,7 +3243,7 @@ export default function AddWorker() {
             setIsSubmitting(true);
             
             // 💡 Combine phone number + chosen handle suffix if phone is provided
-            const finalUpiId = phone.length === 10 ? `${phone}${upiHandle}` : "";
+            const finalUpiId = scannedUpiId || (phone.length === 10 ? `${phone}${upiHandle}` : "");
 
             const payload = {
                 name: name.trim(),
@@ -3140,6 +3317,13 @@ export default function AddWorker() {
                         </div>
                     </div>
 
+                    {/* Upload QR Code Button */}
+                    <label className="mt-2.5 flex items-center justify-center gap-2 w-full bg-blue-50 border border-dashed border-[#1048A4] text-[#1048A4] text-xs font-bold py-2.5 rounded-xl cursor-pointer active:scale-98 transition">
+                        <QrCode className="w-4 h-4" />
+                        {scannedUpiId ? `QR Linked: ${scannedUpiId} (Tap to change)` : "Or Upload Worker's UPI QR Screenshot"}
+                        <input type="file" accept="image/*" onChange={handleQrUpload} className="hidden" />
+                    </label>
+
                     {/* Optional UPI ID Builder Section */}
                     <div className="pt-2">
                         <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-1.5">
@@ -3148,7 +3332,7 @@ export default function AddWorker() {
                         <div className="flex gap-2 items-center">
                             {/* Auto-populated preview box */}
                             <div className="flex-1 bg-gray-50 border border-gray-300 rounded-xl px-3.5 py-3 text-sm font-bold text-gray-700 truncate select-none">
-                                {phone ? `${phone}${upiHandle}` : "Enter phone above..."}
+                                {scannedUpiId ? scannedUpiId : (phone ? `${phone}${upiHandle}` : "Enter phone above...")}
                             </div>
                             
                             {/* Bank / App Handle Suffix Selector */}
@@ -3694,6 +3878,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import useSWR, { mutate } from 'swr';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { generateDynamicUpiQrDataUrl, shareQrImageToUpiApp } from '../lib/qrUtils';
 
 // used to show the "Time ago" in the worker advance list
 dayjs.extend(relativeTime);
@@ -3819,6 +4004,13 @@ const CashbookPage = () => {
 
         // If Online is selected and we aren't already waiting for confirmation
         if (advancePaymentMethod === 'Online' && !isWaitingForUpi && !isUpiRedirecting) {
+            const finalUpiId = workerObj?.upiId || localStorage.getItem(`upi_${selectedWorkerId}`) || (workerObj?.phoneNumber ? `${workerObj.phoneNumber}@ybl` : '');
+            
+            if (!finalUpiId) {
+                toast.error('Please add a phone number or UPI ID for this worker first!');
+                return;
+            }
+
             // 1. Save payload data temporarily
             setPendingUpiData({
                 entryType: "Advance",
@@ -3827,7 +4019,8 @@ const CashbookPage = () => {
                 paymentMethod: "Online",
                 description: advanceNotes,
                 date: dayjs(`${entryDate}T${entryTime}`).toISOString(),
-                workerName: workerName
+                workerName: workerName,
+                upiId: finalUpiId
             });
 
             // 2. Close the Log Advance bottom sheet immediately so Cashbook is behind the blur
@@ -3836,8 +4029,8 @@ const CashbookPage = () => {
             // 3. Lock the entire screen so nothing can be tapped for 3.5 seconds
             setIsUpiRedirecting(true);
 
-            // 4. Trigger GPay / UPI deep link
-            triggerUpiPayment(amountNum, note);
+            // 4. Generate & Share QR Code with finalUpiId
+            triggerUpiPayment(amountNum, note, finalUpiId, workerName);
 
             // 5. Wait 3.5 seconds, then unlock into the Yes/No confirmation modal
             setTimeout(() => {
@@ -3884,23 +4077,30 @@ const CashbookPage = () => {
             toast.error(error.response?.data?.message || "Failed to log advance payment.");
         } finally {
             setIsSubmittingPayment(false);
-            setIsWaitingForUpi(false);
+            // setIsWaitingForUpi(false);
         }
     };
 
 
-    const triggerUpiPayment = (amount, note) => {
-    // Find the selected worker object from your workers array
-        const workerObj = workers.find(w => (w._id || w.id) === selectedWorkerId);
-        
-        // Use their saved UPI ID, or fallback to phone@ybl if not set
-        const workerUpiId = workerObj?.upiId || (workerObj?.phoneNumber ? `${workerObj.phoneNumber}@ybl` : "merchant@upi");
-        const workerName = encodeURIComponent(workerObj?.name || 'Worker');
+        const triggerUpiPayment = async (amount, note) => {
+            try {
+                // 1. Generate crisp QR image with the exact amount baked in
+                const { dataUrl } = await generateDynamicUpiQrDataUrl({
+                    upiId: workerUpiId,
+                    workerName,
+                    amount,
+                    note
+                });
 
-        // 💡 Launches GPay/PhonePe directly with the worker's personal VPA and amount pre-filled!
-        const upiUrl = `upi://pay?pa=${workerUpiId}&pn=${workerName}&am=${amount}&tn=${encodeURIComponent(note || 'Worker Advance')}&cu=INR`;
-        window.location.href = upiUrl;
-    };
+                // Save QR image in state so the confirmation popup can also display it!
+                setPendingUpiData(prev => prev ? { ...prev, qrDataUrl: dataUrl, upiId: workerUpiId } : prev);
+
+                // 2. Open Android native Share Sheet -> Select "Google Pay" or "PhonePe" to scan immediately!
+                await shareQrImageToUpiApp(dataUrl, workerName, amount);
+            } catch (err) {
+                console.error("QR Share error:", err);
+            }
+        };
 
     const handleBossSubmit = async (e) => {
         if(e) e.preventDefault();
@@ -4683,13 +4883,26 @@ return (
                         </div>
 
                         <div>
-                            <h2 className="text-base font-extrabold text-gray-900 tracking-tight">Payment Confirmation</h2>
-                            <p className="text-sm font-medium text-gray-600 mt-2 leading-relaxed">
-                                Please confirm if the transfer of <span className="font-bold text-[#C0392B]">₹{pendingUpiData.amount}</span> to <span className="font-bold text-[#1048A4]">{pendingUpiData.workerName}</span> was completed successfully via GPay.
-                            </p>
-                        </div>
+                          <h2 className="text-base font-extrabold text-gray-900 tracking-tight">Payment Confirmation</h2>
+                          <p className="text-sm font-medium text-gray-600 mt-2 leading-relaxed">
+                              Please confirm if the transfer of <span className="font-bold text-[#C0392B]">₹{pendingUpiData.amount}</span> to <span className="font-bold text-[#1048A4]">{pendingUpiData.workerName}</span> was completed successfully via GPay.
+                          </p>
+                      </div>
 
-                        <div className="flex gap-3 pt-2">
+                      {pendingUpiData.qrDataUrl && (
+                          <div className="flex flex-col items-center bg-gray-50 p-3 rounded-xl border border-gray-200">
+                              <img src={pendingUpiData.qrDataUrl} alt="Payment QR" className="w-36 h-36 rounded-lg shadow-sm" />
+                              <button
+                                  type="button"
+                                  onClick={() => shareQrImageToUpiApp(pendingUpiData.qrDataUrl, pendingUpiData.workerName, pendingUpiData.amount)}
+                                  className="mt-2 bg-[#1A73E8] text-white px-4 py-2 rounded-lg text-xs font-bold shadow active:scale-95 transition"
+                              >
+                                  Open QR in GPay / PhonePe Scanner
+                              </button>
+                          </div>
+                      )}
+
+                      <div className="flex gap-3 pt-2">
                             {/* NO / CANCELED BUTTON */}
                             <button 
                                 type="button"

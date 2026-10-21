@@ -9,6 +9,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import useSWR, { mutate } from 'swr';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { generateDynamicUpiQrDataUrl, shareQrImageToUpiApp } from '../lib/qrUtils';
 
 // used to show the "Time ago" in the worker advance list
 dayjs.extend(relativeTime);
@@ -134,10 +135,13 @@ const CashbookPage = () => {
 
         // If Online is selected and we aren't already waiting for confirmation
         if (advancePaymentMethod === 'Online' && !isWaitingForUpi && !isUpiRedirecting) {
-            const savedId = workerObj?.upiId || localStorage.getItem(`upi_${selectedWorkerId}`) || '';
-            const upiId = (window.prompt(`UPI ID of ${workerName}`, savedId) || '').trim();
-            if (!/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(upiId)) { toast.error('Enter a valid UPI ID like name@ybl'); return; }
-            localStorage.setItem(`upi_${selectedWorkerId}`, upiId);
+            const finalUpiId = workerObj?.upiId || localStorage.getItem(`upi_${selectedWorkerId}`) || (workerObj?.phoneNumber ? `${workerObj.phoneNumber}@ybl` : '');
+            
+            if (!finalUpiId) {
+                toast.error('Please add a phone number or UPI ID for this worker first!');
+                return;
+            }
+
             // 1. Save payload data temporarily
             setPendingUpiData({
                 entryType: "Advance",
@@ -147,27 +151,23 @@ const CashbookPage = () => {
                 description: advanceNotes,
                 date: dayjs(`${entryDate}T${entryTime}`).toISOString(),
                 workerName: workerName,
-                upiId: workerObj?.upiId || localStorage.getItem(`upi_${selectedWorkerId}`) || ''
+                upiId: finalUpiId
             });
 
             // 2. Close the Log Advance bottom sheet immediately so Cashbook is behind the blur
             setShowWorkerModal(false);
 
             // 3. Lock the entire screen so nothing can be tapped for 3.5 seconds
-            // setIsUpiRedirecting(true);
+            setIsUpiRedirecting(true);
 
-            // // 4. Trigger GPay / UPI deep link
-            // triggerUpiPayment(amountNum, note);
+            // 4. Generate & Share QR Code with finalUpiId
+            triggerUpiPayment(amountNum, note, finalUpiId, workerName);
 
-            // // 5. Wait 3.5 seconds, then unlock into the Yes/No confirmation modal
-            // setTimeout(() => {
-            //     setIsUpiRedirecting(false);
-            //     setIsWaitingForUpi(true);
-            // }, 3500);
-                      navigator.clipboard.writeText(String(amountNum)).catch(() => {});
-            toast.success(`₹${amountNum} copied. Paste it in the amount box.`, { duration: 5000 });
-            setIsWaitingForUpi(true);
-            window.location.href = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(workerName)}&cu=INR`;
+            // 5. Wait 3.5 seconds, then unlock into the Yes/No confirmation modal
+            setTimeout(() => {
+                setIsUpiRedirecting(false);
+                setIsWaitingForUpi(true);
+            }, 3500);
             return;
         }
 
@@ -213,24 +213,25 @@ const CashbookPage = () => {
     };
 
 
-    const triggerUpiPayment = (amount, note) => {
-        const workerObj = workers.find(w => (w._id || w.id) === selectedWorkerId);
-        
-        // Use their saved UPI ID, or fallback to phone@ybl
-        const workerUpiId = workerObj?.upiId || (workerObj?.phoneNumber ? `${workerObj.phoneNumber}@ybl` : "merchant@upi");
-        const workerName = encodeURIComponent(workerObj?.name || 'Worker');
-        const cleanNote = encodeURIComponent(note || 'Worker Advance');
+       const triggerUpiPayment = async (amount, note, workerUpiId, workerName) => {
+            try {
+                // 1. Generate crisp QR image with the exact amount baked in
+                const { dataUrl } = await generateDynamicUpiQrDataUrl({
+                    upiId: workerUpiId,
+                    workerName,
+                    amount,
+                    note
+                });
 
-        // 1. Copy the amount to clipboard automatically so Dad can just paste it easily!
-        navigator.clipboard.writeText(amount.toString()).catch(() => {});
+                // Save QR image in state so the confirmation popup can also display it!
+                setPendingUpiData(prev => prev ? { ...prev, qrDataUrl: dataUrl, upiId: workerUpiId } : prev);
 
-        // 2. Launch UPI app WITHOUT the locked 'am=' parameter (This completely bypasses the NPCI risk block!)
-        const upiUrl = `upi://pay?pa=${workerUpiId}&pn=${workerName}&tn=${cleanNote}&cu=INR`;
-        
-        toast.success(`₹${amount} copied to clipboard! Paste it in the payment app.`, { duration: 4000 });
-        
-        window.location.href = upiUrl;
-    };
+                // 2. Open Android native Share Sheet -> Select "Google Pay" or "PhonePe" to scan immediately!
+                await shareQrImageToUpiApp(dataUrl, workerName, amount);
+            } catch (err) {
+                console.error("QR Share error:", err);
+            }
+        };
 
     const handleBossSubmit = async (e) => {
         if(e) e.preventDefault();
@@ -1013,13 +1014,26 @@ return (
                         </div>
 
                         <div>
-                            <h2 className="text-base font-extrabold text-gray-900 tracking-tight">Payment Confirmation</h2>
-                            <p className="text-sm font-medium text-gray-600 mt-2 leading-relaxed">
-                                Please confirm if the transfer of <span className="font-bold text-[#C0392B]">₹{pendingUpiData.amount}</span> to <span className="font-bold text-[#1048A4]">{pendingUpiData.workerName}</span> was completed successfully via GPay.
-                            </p>
-                        </div>
+                          <h2 className="text-base font-extrabold text-gray-900 tracking-tight">Payment Confirmation</h2>
+                          <p className="text-sm font-medium text-gray-600 mt-2 leading-relaxed">
+                              Please confirm if the transfer of <span className="font-bold text-[#C0392B]">₹{pendingUpiData.amount}</span> to <span className="font-bold text-[#1048A4]">{pendingUpiData.workerName}</span> was completed successfully via GPay.
+                          </p>
+                      </div>
 
-                        <div className="flex gap-3 pt-2">
+                      {pendingUpiData.qrDataUrl && (
+                          <div className="flex flex-col items-center bg-gray-50 p-3 rounded-xl border border-gray-200">
+                              <img src={pendingUpiData.qrDataUrl} alt="Payment QR" className="w-36 h-36 rounded-lg shadow-sm" />
+                              <button
+                                  type="button"
+                                  onClick={() => shareQrImageToUpiApp(pendingUpiData.qrDataUrl, pendingUpiData.workerName, pendingUpiData.amount)}
+                                  className="mt-2 bg-[#1A73E8] text-white px-4 py-2 rounded-lg text-xs font-bold shadow active:scale-95 transition"
+                              >
+                                  Open QR in GPay / PhonePe Scanner
+                              </button>
+                          </div>
+                      )}
+
+                      <div className="flex gap-3 pt-2">
                             {/* NO / CANCELED BUTTON */}
                             <button 
                                 type="button"

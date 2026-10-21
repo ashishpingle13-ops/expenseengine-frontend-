@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
-import { ArrowLeft, User, Phone } from 'lucide-react';
+import { decodeUpiFromQrImage } from '../lib/qrUtils';
+import { ArrowLeft, User, Phone, QrCode } from 'lucide-react';
 import { mutate } from 'swr';
 
 export default function AddWorker() {
@@ -15,6 +16,7 @@ export default function AddWorker() {
     const [name, setName] = useState(location.state?.initialName || '');
     const [phone, setPhone] = useState(location.state?.initialPhone || '');
     const [upiHandle, setUpiHandle] = useState("@ybl");
+    const [scannedUpiId, setScannedUpiId] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // ─── Strict Validation Handlers ──────────────────────────────
@@ -28,6 +30,18 @@ export default function AddWorker() {
         // Only allow numbers and limit strictly to 10 digits
         const filtered = e.target.value.replace(/\D/g, '').slice(0, 10);
         setPhone(filtered);
+    };
+
+    const handleQrUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            const extractedUpi = await decodeUpiFromQrImage(file);
+            setScannedUpiId(extractedUpi);
+            toast.success(`Verified QR! UPI ID: ${extractedUpi}`);
+        } catch (err) {
+            toast.error(err.message || "Could not read QR code. Try a clearer image.");
+        }
     };
 
     // ─── Submit Handler ──────────────────────────────────────────
@@ -47,7 +61,7 @@ export default function AddWorker() {
             setIsSubmitting(true);
             
             // 💡 Combine phone number + chosen handle suffix if phone is provided
-            const finalUpiId = phone.length === 10 ? `${phone}${upiHandle}` : "";
+            const finalUpiId = scannedUpiId || (phone.length === 10 ? `${phone}${upiHandle}` : "");
 
             const payload = {
                 name: name.trim(),
@@ -121,6 +135,13 @@ export default function AddWorker() {
                         </div>
                     </div>
 
+                    {/* Upload QR Code Button */}
+                    <label className="mt-2.5 flex items-center justify-center gap-2 w-full bg-blue-50 border border-dashed border-[#1048A4] text-[#1048A4] text-xs font-bold py-2.5 rounded-xl cursor-pointer active:scale-98 transition">
+                        <QrCode className="w-4 h-4" />
+                        {scannedUpiId ? `QR Linked: ${scannedUpiId} (Tap to change)` : "Or Upload Worker's UPI QR Screenshot"}
+                        <input type="file" accept="image/*" onChange={handleQrUpload} className="hidden" />
+                    </label>
+
                     {/* Optional UPI ID Builder Section */}
                     <div className="pt-2">
                         <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-1.5">
@@ -129,7 +150,7 @@ export default function AddWorker() {
                         <div className="flex gap-2 items-center">
                             {/* Auto-populated preview box */}
                             <div className="flex-1 bg-gray-50 border border-gray-300 rounded-xl px-3.5 py-3 text-sm font-bold text-gray-700 truncate select-none">
-                                {phone ? `${phone}${upiHandle}` : "Enter phone above..."}
+                                {scannedUpiId ? scannedUpiId : (phone ? `${phone}${upiHandle}` : "Enter phone above...")}
                             </div>
                             
                             {/* Bank / App Handle Suffix Selector */}

@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
-import { ArrowLeft, User, Phone, AtSign, Camera, Trash2, UserCheck, ChevronRight } from 'lucide-react';
+import { ArrowLeft, User, Phone, AtSign, Camera, Trash2, UserCheck, ChevronRight, QrCode } from 'lucide-react';
+import { decodeUpiFromQrImage } from '../lib/qrUtils';
 import toast, { Toaster } from "react-hot-toast";
 import { mutate } from 'swr';
 
@@ -45,21 +46,25 @@ const EditWorker = () => {
   };
 
   const handleUpdate = async () => {
-    try {
-      setIsSaving(true);
-      
-      // Pass upiId along with name and phone
-      await api.put(`/workers/${workerId}`, { 
-          name, 
-          phoneNumber: phone, 
-          upiId, 
-          isActive 
-      });
-      
-      mutate('/workers');
-      mutate('/workers?includeInactive=true');
-      toast.success("Profile saved!");
-      navigate(-1);
+  if (!name.trim()) return toast.error("Worker name cannot be empty!");
+  if (phone.length !== 10) return toast.error("Phone number must be 10 digits!");
+
+  try {
+    setIsSaving(true);
+
+    // Pass upiId along with name and phone
+    await api.put(`/workers/${workerId}`, { 
+        name: name.trim(), 
+        phoneNumber: phone, 
+        upiId, 
+        isActive 
+    });
+
+    mutate('/workers');
+    mutate('/workers?includeInactive=true');
+    mutate(`/workers/${workerId}`); // 💡 Immediately updates WorkerLedger header!
+    toast.success("Profile saved!");
+    navigate(-1);
     } catch (error) {
       console.error("Error updating worker:", error);
       toast.error("Failed to save profile.");
@@ -77,6 +82,7 @@ const EditWorker = () => {
       
       mutate('/workers');
       mutate('/workers?includeInactive=true');
+      mutate(`/workers/${workerId}`);
       toast.success(`Worker ${newStatus ? 'reactivated' : 'deactivated'}!`);
       setTimeout(() => navigate('/dashboard'), 500);
     } catch (error) {
@@ -179,21 +185,40 @@ const EditWorker = () => {
             <ChevronRight className='w-4 h-4 text-gray-300' />
           </div>
 
-          {/* UPI ID Row */}
-          <div className='flex items-center px-4 py-3'>
-            <AtSign className='w-5 h-5 text-gray-400 shrink-0 mr-4' />
-            <div className='flex-1 min-w-0'>
-              <label className='text-[11px] text-gray-500 font-medium'>UPI ID (Optional)</label>
-              <input 
-                  type="text" 
-                  value={upiId} 
-                  placeholder="e.g. 9876543210@ybl"
-                  onChange={(e) => setUpiId(e.target.value.trim().toLowerCase())} 
-                  className='w-full text-[15px] font-semibold text-gray-900 outline-none bg-transparent pb-1 placeholder-gray-300' 
-              />
-            </div>
-            <ChevronRight className='w-4 h-4 text-gray-300' />
-          </div>
+              {/* UPI ID Row */}
+              <div className='flex items-center px-4 py-3'>
+                <AtSign className='w-5 h-5 text-gray-400 shrink-0 mr-4' />
+                <div className='flex-1 min-w-0'>
+                  <label className='text-[11px] text-gray-500 font-medium'>UPI ID (Or tap QR icon to scan image)</label>
+                  <input 
+                      type="text" 
+                      value={upiId} 
+                      placeholder="e.g. 9876543210@ybl"
+                      onChange={(e) => setUpiId(e.target.value.trim().toLowerCase())} 
+                      className='w-full text-[15px] font-semibold text-gray-900 outline-none bg-transparent pb-1 placeholder-gray-300' 
+                  />
+                </div>
+                <label className="p-2 bg-blue-50 text-[#1048A4] rounded-lg cursor-pointer active:scale-95 transition flex items-center gap-1 text-xs font-bold">
+                  <QrCode className="w-4 h-4" />
+                  <span>Scan QR</span>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const extracted = await decodeUpiFromQrImage(file);
+                        setUpiId(extracted);
+                        toast.success(`QR Decoded: ${extracted}`);
+                      } catch (err) {
+                        toast.error(err.message);
+                      }
+                    }}
+                  />
+                </label>
+              </div>
 
         </div>
 
