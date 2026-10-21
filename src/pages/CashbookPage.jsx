@@ -10,6 +10,8 @@ import useSWR, { mutate } from 'swr';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { generateDynamicUpiQrDataUrl, shareQrImageToUpiApp } from '../lib/qrUtils';
+import TransactionModal from '../components/TransactionModal';
+
 
 // used to show the "Time ago" in the worker advance list
 dayjs.extend(relativeTime);
@@ -751,184 +753,46 @@ return (
                                 )}
 
             
-            {/* 🌟 UNIFIED UNIVERSAL BOTTOM SHEET (Advances & Deposits) */}
-            {(showWorkerModal || showBossModal) && (
-                <div className="fixed inset-0 z-50 flex flex-col justify-end max-w-md mx-auto ">
-                    <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={() => { setShowWorkerModal(false); setShowBossModal(false); setBossEditId(null); setIsWorkerDropdownOpen(false); setSelectedWorkerId(""); }} />
-                    <div className="relative bg-white rounded-t-2xl px-5 pt-4 pb-8 animate-slide-up-bottom" style={{ boxShadow: "0 -4px 24px rgba(0,0,0,0.12)" }}>
-                        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4 shrink-0" />
-                        
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
-                                {showWorkerModal ? "Log Advance" : bossEditId ? "Edit Deposit" : "Log Deposit"}
-                            </h2>
-                            <button onClick={() => { setShowWorkerModal(false); setShowBossModal(false); setBossEditId(null); setIsWorkerDropdownOpen(false); setSelectedWorkerId(""); }} className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center">
-                                <X className="w-3.5 h-3.5 text-gray-500" />
-                            </button>
-                        </div>
-
-                        <div className="overflow-y-auto max-h-[75vh]" style={{ scrollbarWidth: 'none' }}>
-                            <form id="unifiedForm" onSubmit={showWorkerModal ? handleSubmitAdvance : handleBossSubmit}>
-                                
-                                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Amount (₹)</label>
-                                <div className={`border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 mb-3 bg-white ${showWorkerModal ? 'focus-within:border-[#9D0052]' : 'focus-within:border-[#0E793C]'}`}>
-                                    <IndianRupee className={`w-5 h-5 shrink-0 ${showWorkerModal ? 'text-[#9D0052]' : 'text-[#0E793C]'}`} />
-                                    <input type="number" required value={showWorkerModal ? advanceAmount : bossFormData.amount} onChange={(e) => showWorkerModal ? setAdvanceAmount(e.target.value) : setBossFormData({...bossFormData, amount: e.target.value})} placeholder="0" className="flex-1 text-2xl font-extrabold text-gray-900 outline-none placeholder-gray-300 bg-transparent w-full" />
-                                </div>
-
-                                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Payment Method</label>
-                                <div className="flex gap-2 mb-3">
-                                    {['Cash', 'Online', 'Check', 'Other'].map((method) => {
-                                        const isSelected = showWorkerModal ? advancePaymentMethod === method : bossFormData.paymentMethod === method;
-                                        const activeBg = showWorkerModal ? 'bg-[#9D0052] border-[#9D0052]' : 'bg-[#0E793C] border-[#0E793C]';
-                                        
-                                        return (
-                                            <button
-                                                key={method}
-                                                type="button"
-                                                onClick={() => showWorkerModal ? setAdvancePaymentMethod(method) : setBossFormData({...bossFormData, paymentMethod: method})}
-                                                className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-colors ${isSelected ? `${activeBg} text-white` : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}
-                                            >
-                                                {method}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-
-                            
-                                    {showWorkerModal && (
-                                    <div className="mb-3 relative">
-                                        <label className="block text-[11px] font-semibold text-gray-400 uppercase mb-1">
-                                        Worker
-                                        </label>
-
-                                        <button
-                                        type="button"
-                                        onClick={() => setIsWorkerDropdownOpen(!isWorkerDropdownOpen)}
-                                        className="w-full border border-gray-200 rounded-lg p-3 flex justify-between text-sm"
-                                        >
-                                        {workers.find(w => (w._id || w.id) === selectedWorkerId)?.name || "-- Select Active Worker --"}
-                                        <ChevronDown size={16} className="text-[#9D0052]" />
-                                        </button>
-
-                                        {isWorkerDropdownOpen && (
-                                        <div className="absolute z-50 w-full bg-white border rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                                            {workers.filter(w => w.isActive !== false).map(w => (
-                                            <button
-                                                key={w._id || w.id}
-                                                type="button"
-                                                onClick={() => {
-                                                setSelectedWorkerId(w._id || w.id);
-                                                setIsWorkerDropdownOpen(false);
-                                                }}
-                                                className="block w-full text-left p-2.5 text-sm hover:bg-pink-50"
-                                            >
-                                                {w.name}
-                                            </button>
-                                            ))}
-                                        </div>
-                                        )}
-                                    </div>
-                                    )}
-
-
-                                <div className="flex gap-2 mb-3">
-                                    <div className="flex-1">
-                                        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Date</label>
-                                        <div className={`border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 bg-white ${showWorkerModal ? 'focus-within:border-[#9D0052]' : 'focus-within:border-[#0E793C]'}`}>
-                                            <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
-                                            <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className="flex-1 text-sm font-semibold text-gray-800 outline-none bg-transparent min-w-0" />
-                                        </div>
-                                    </div>
-                                    <div className="w-32">
-                                        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Time</label>
-                                        <div className={`border border-gray-200 rounded-lg px-3 py-2.5 bg-white flex items-center ${showWorkerModal ? 'focus-within:border-[#9D0052]' : 'focus-within:border-[#0E793C]'}`}>
-                                            <input type="time" value={entryTime} onChange={(e) => setEntryTime(e.target.value)} className="w-full text-sm font-semibold text-gray-800 outline-none bg-transparent" />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {!showWorkerModal && (
-                                    <>
-                                        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Transaction ID <span className="normal-case tracking-normal font-medium">(Optional)</span></label>
-                                        <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 mb-3 bg-white focus-within:border-[#0E793C]">
-                                            <Hash className="w-4 h-4 text-gray-400 shrink-0" />
-                                            <input type="text" value={bossFormData.transactionId} onChange={(e) => setBossFormData({...bossFormData, transactionId: e.target.value})} placeholder="Bank or UPI reference" className="flex-1 text-sm font-semibold text-gray-800 outline-none placeholder-gray-400 bg-transparent w-full" />
-                                        </div>
-                                    </>
-                                )}
-
-                                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Description / Notes</label>
-                                <div className={`border border-gray-200 rounded-lg px-3 py-2.5 flex items-start gap-2 mb-5 bg-white ${showWorkerModal ? 'focus-within:border-[#9D0052]' : 'focus-within:border-[#0E793C]'}`}>
-                                    <FileText className={`w-4 h-4 shrink-0 mt-0.5 ${showWorkerModal ? 'text-[#9D0052]' : 'text-[#0E793C]'}`} />
-                                    <textarea value={showWorkerModal ? advanceNotes : bossFormData.notes} onChange={(e) => showWorkerModal ? setAdvanceNotes(e.target.value) : setBossFormData({...bossFormData, notes: e.target.value})} rows={2} placeholder="Add details..." className="flex-1 text-sm text-gray-800 outline-none resize-none placeholder-gray-400 bg-transparent" />
-                                </div>
-
-                               {bossEditId && !showWorkerModal && (
-                                    <div className="mb-5 relative">
-                                        <label className="block text-[11px] font-bold text-[#0E793C] uppercase tracking-widest mb-1">Reason for Edit *</label>
-                                        
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsReasonDropdownOpen(!isReasonDropdownOpen)}
-                                            className="w-full border-2 border-[#0E793C]/20 rounded-lg px-3 py-2.5 flex items-center justify-between bg-green-50/30 focus:border-[#0E793C] text-sm font-semibold text-gray-900"
-                                        >
-                                            <span className={bossFormData.reason ? "text-gray-900" : "text-gray-400"}>
-                                                {bossFormData.reason || "Select a reason..."}
-                                            </span>
-                                            <ChevronDown className={`w-4 h-4 text-[#0E793C] shrink-0 transition-transform ${isReasonDropdownOpen ? 'rotate-180' : ''}`} />
-                                        </button>
-
-                                        {isReasonDropdownOpen && (
-                                            <div className="absolute bottom-full left-0 mb-1.5 z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto py-1">
-                                                {EDIT_REASONS.map((r) => (
-                                                    <button
-                                                        key={r}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setBossFormData({ ...bossFormData, reason: r });
-                                                            setIsReasonDropdownOpen(false);
-                                                        }}
-                                                        className={`block w-full text-left px-3.5 py-2.5 text-sm font-medium transition-colors ${
-                                                            bossFormData.reason === r ? 'bg-green-50 text-[#0E793C] font-bold' : 'text-gray-700 hover:bg-gray-50'
-                                                        }`}
-                                                    >
-                                                        {r}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                                </form>
-                        </div>
-
-                    
-                                <button 
-                                    type="submit" 
-                                    form="unifiedForm" 
-                                    disabled={isSubmittingPayment} 
-                                    className={`w-full text-white text-sm font-bold rounded-xl py-3.5 tracking-wider uppercase transition-all active:scale-[0.99] disabled:opacity-70 ${
-                                        showWorkerModal && advancePaymentMethod === 'Online' 
-                                            ? 'bg-[#1A73E8] hover:bg-[#1557B0]' 
-                                            : showWorkerModal 
-                                                ? 'bg-[#9D0052] hover:bg-[#800043]' 
-                                                : 'bg-[#0E793C] hover:bg-[#0A5C2D]'
-                                    }`}
-                                >
-                                    {isSubmittingPayment 
-                                        ? "SAVING..." 
-                                        : bossEditId 
-                                            ? "SAVE CHANGES" 
-                                            : showWorkerModal && advancePaymentMethod === 'Online' 
-                                                ? `PAY ₹${advanceAmount || 0} ON GPAY` 
-                                                : showWorkerModal 
-                                                    ? "SAVE ADVANCE" 
-                                                    : "SAVE DEPOSIT"}
-                                </button>
-                    </div>
-                </div>
-            )}
+                                    {/* 🌟 UNIFIED UNIVERSAL BOTTOM SHEET (Advances & Deposits) */}
+                                    <TransactionModal
+                                        isOpen={showWorkerModal || showBossModal}
+                                        onClose={() => { setShowWorkerModal(false); setShowBossModal(false); setBossEditId(null); setIsWorkerDropdownOpen(false); setSelectedWorkerId(""); }}
+                                        onSubmit={showWorkerModal ? handleSubmitAdvance : handleBossSubmit}
+                                        type={showWorkerModal ? "Advance" : "BossDeposit"}
+                                        editId={bossEditId}
+                                        formData={{
+                                            amount: showWorkerModal ? advanceAmount : bossFormData.amount,
+                                            paymentMethod: showWorkerModal ? advancePaymentMethod : bossFormData.paymentMethod,
+                                            selectedWorkerId: selectedWorkerId,
+                                            entryDate: entryDate,
+                                            entryTime: entryTime,
+                                            transactionId: bossFormData.transactionId,
+                                            notes: showWorkerModal ? advanceNotes : bossFormData.notes,
+                                            reason: bossFormData.reason
+                                        }}
+                                        setFormData={(updated) => {
+                                            if (showWorkerModal) {
+                                                if (updated.amount !== undefined) setAdvanceAmount(updated.amount);
+                                                if (updated.paymentMethod !== undefined) setAdvancePaymentMethod(updated.paymentMethod);
+                                                if (updated.selectedWorkerId !== undefined) setSelectedWorkerId(updated.selectedWorkerId);
+                                                if (updated.entryDate !== undefined) setEntryDate(updated.entryDate);
+                                                if (updated.entryTime !== undefined) setEntryTime(updated.entryTime);
+                                                if (updated.notes !== undefined) setAdvanceNotes(updated.notes);
+                                            } else {
+                                                setBossFormData(prev => ({ ...prev, ...updated }));
+                                            }
+                                        }}
+                                        workers={workers}
+                                        isWorkerDropdownOpen={isWorkerDropdownOpen}
+                                        setIsWorkerDropdownOpen={setIsWorkerDropdownOpen}
+                                        isReasonDropdownOpen={isReasonDropdownOpen}
+                                        setIsReasonDropdownOpen={setIsReasonDropdownOpen}
+                                        EDIT_REASONS={EDIT_REASONS}
+                                        isSubmitting={isSubmittingPayment}
+                                        isWaitingForUpi={isWaitingForUpi}
+                                        pendingUpiData={pendingUpiData}
+                                        onCancelUpi={() => { setIsWaitingForUpi(false); setPendingUpiData(null); setShowWorkerModal(false); }}
+                                    />
             
             {/* 6. EXPORT LEDGER MODAL (Centered Pop-in) */}
             {showExportModal && (
