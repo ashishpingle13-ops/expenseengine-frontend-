@@ -52,6 +52,7 @@ src/
     BottomNav.jsx
     Navbar.jsx
     ProtectedRoute.jsx
+    TransactionModal.jsx
     WorkerRow.jsx
   lib/
     api.js
@@ -86,133 +87,6 @@ vite.config.js
 
 <files>
 This section contains the contents of the repository's files.
-
-<file path="src/lib/qrUtils.js">
-import jsQR from "jsqr";
-import QRCode from "qrcode";
-import { Capacitor } from "@capacitor/core";
-import { Share } from "@capacitor/share";
-import { Filesystem, Directory } from "@capacitor/filesystem";
-
-// 1. Reads a QR code image file and extracts the exact UPI string or VPA
-export const decodeUpiFromQrImage = (file) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-
-        // Scale down huge phone screenshots to max 800px so jsQR reads them fast & accurately
-        const MAX_DIM = 800;
-        let width = img.width;
-        let height = img.height;
-        if (width > MAX_DIM || height > MAX_DIM) {
-          if (width > height) {
-            height = Math.round((height * MAX_DIM) / width);
-            width = MAX_DIM;
-          } else {
-            width = Math.round((width * MAX_DIM) / height);
-            height = MAX_DIM;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        ctx.drawImage(img, 0, 0, width, height);
-
-        const imageData = ctx.getImageData(0, 0, width, height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height);
-
-        if (code && code.data && code.data.toLowerCase().includes("upi://pay")) {
-          // Extract the 'pa' (VPA) parameter or save the clean VPA
-          try {
-            const url = new URL(code.data);
-            const pa = url.searchParams.get("pa");
-            resolve(pa || code.data);
-          } catch {
-            resolve(code.data);
-          }
-        } else {
-          reject(new Error("No valid UPI QR code found in this image."));
-        }
-      };
-      img.onerror = () => reject(new Error("Failed to load image."));
-      img.src = e.target.result;
-    };
-    reader.onerror = () => reject(new Error("Failed to read file."));
-    reader.readAsDataURL(file);
-  });
-};
-
-// 2. Generates a high-contrast QR Image DataURL with the exact amount baked in
-export const generateDynamicUpiQrDataUrl = async ({ upiId, workerName, amount, note }) => {
-  // Clean VPA if full upi:// string was stored
-  let cleanPa = upiId;
-  if (upiId.startsWith("upi://")) {
-    try {
-      const parsed = new URL(upiId);
-      cleanPa = parsed.searchParams.get("pa") || upiId;
-    } catch {}
-  }
-
-  const formattedAmount = Number(amount).toFixed(2);
-  const upiString = `upi://pay?pa=${encodeURIComponent(cleanPa)}&pn=${encodeURIComponent(
-    workerName || "Worker"
-  )}&am=${formattedAmount}&cu=INR&tn=${encodeURIComponent(note || "Worker Advance")}`;
-
-  // Generate a 600x600 crisp PNG QR code with wide white margins (vital for GPay scanner)
-  const dataUrl = await QRCode.toDataURL(upiString, {
-    width: 600,
-    margin: 4,
-    color: {
-      dark: "#000000",
-      light: "#FFFFFF",
-    },
-  });
-
-  return { dataUrl, upiString, cleanPa };
-};
-
-// 3. Shares the generated QR image directly to Google Pay / PhonePe on Android
-export const shareQrImageToUpiApp = async (dataUrl, workerName, amount) => {
-  // Copy amount to clipboard as an extra safety net
-  try {
-    await navigator.clipboard.writeText(String(amount));
-  } catch {}
-
-  if (Capacitor.isNativePlatform()) {
-    // Native Android APK: Write temp PNG to cache and open native Android Share Sheet
-    const base64Data = dataUrl.split(",")[1];
-    const fileName = `upi_qr_${Date.now()}.png`;
-
-    const savedFile = await Filesystem.writeFile({
-      path: fileName,
-      data: base64Data,
-      directory: Directory.Cache,
-    });
-
-    await Share.share({
-      title: `Pay ₹${amount} to ${workerName}`,
-      text: `Scan with Google Pay or PhonePe to pay ₹${amount} to ${workerName}`,
-      url: savedFile.uri,
-      dialogTitle: "Select Google Pay / PhonePe to Scan QR",
-    });
-  } else if (navigator.canShare) {
-    // Mobile Chrome Web Fallback
-    const res = await fetch(dataUrl);
-    const blob = await res.blob();
-    const file = new File([blob], "payment_qr.png", { type: "image/png" });
-    if (navigator.canShare({ files: [file] })) {
-      await navigator.share({
-        title: `Pay ₹${amount} to ${workerName}`,
-        files: [file],
-      });
-    }
-  }
-};
-</file>
 
 <file path="public/favicon.svg">
 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="46" fill="none" viewBox="0 0 48 46"><path fill="#863bff" d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" style="fill:#863bff;fill:color(display-p3 .5252 .23 1);fill-opacity:1"/><mask id="a" width="48" height="46" x="0" y="0" maskUnits="userSpaceOnUse" style="mask-type:alpha"><path fill="#000" d="M25.842 44.938c-.664.844-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.183c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.498 0-3.579-1.842-3.579H1.133c-.92 0-1.456-1.04-.92-1.787L9.91.473c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.578 1.842 3.578h11.377c.943 0 1.473 1.088.89 1.832L25.843 44.94z" style="fill:#000;fill-opacity:1"/></mask><g mask="url(#a)"><g filter="url(#b)"><ellipse cx="5.508" cy="14.704" fill="#ede6ff" rx="5.508" ry="14.704" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -4.47 31.516)"/></g><g filter="url(#c)"><ellipse cx="10.399" cy="29.851" fill="#ede6ff" rx="10.399" ry="29.851" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -39.328 7.883)"/></g><g filter="url(#d)"><ellipse cx="5.508" cy="30.487" fill="#7e14ff" rx="5.508" ry="30.487" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.814 -25.913 -14.639)scale(1 -1)"/></g><g filter="url(#e)"><ellipse cx="5.508" cy="30.599" fill="#7e14ff" rx="5.508" ry="30.599" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.814 -32.644 -3.334)scale(1 -1)"/></g><g filter="url(#f)"><ellipse cx="5.508" cy="30.599" fill="#7e14ff" rx="5.508" ry="30.599" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -34.34 30.47)"/></g><g filter="url(#g)"><ellipse cx="14.072" cy="22.078" fill="#ede6ff" rx="14.072" ry="22.078" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="rotate(93.35 24.506 48.493)scale(-1 1)"/></g><g filter="url(#h)"><ellipse cx="3.47" cy="21.501" fill="#7e14ff" rx="3.47" ry="21.501" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.009 28.708 47.59)scale(-1 1)"/></g><g filter="url(#i)"><ellipse cx="3.47" cy="21.501" fill="#7e14ff" rx="3.47" ry="21.501" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.009 28.708 47.59)scale(-1 1)"/></g><g filter="url(#j)"><ellipse cx=".387" cy="8.972" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(39.51 .387 8.972)"/></g><g filter="url(#k)"><ellipse cx="47.523" cy="-6.092" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 47.523 -6.092)"/></g><g filter="url(#l)"><ellipse cx="41.412" cy="6.333" fill="#47bfff" rx="5.971" ry="9.665" style="fill:#47bfff;fill:color(display-p3 .2799 .748 1);fill-opacity:1" transform="rotate(37.892 41.412 6.333)"/></g><g filter="url(#m)"><ellipse cx="-1.879" cy="38.332" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 -1.88 38.332)"/></g><g filter="url(#n)"><ellipse cx="-1.879" cy="38.332" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 -1.88 38.332)"/></g><g filter="url(#o)"><ellipse cx="35.651" cy="29.907" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 35.651 29.907)"/></g><g filter="url(#p)"><ellipse cx="38.418" cy="32.4" fill="#47bfff" rx="5.971" ry="15.297" style="fill:#47bfff;fill:color(display-p3 .2799 .748 1);fill-opacity:1" transform="rotate(37.892 38.418 32.4)"/></g></g><defs><filter id="b" width="60.045" height="41.654" x="-19.77" y="16.149" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="c" width="90.34" height="51.437" x="-54.613" y="-7.533" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="d" width="79.355" height="29.4" x="-49.64" y="2.03" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="e" width="79.579" height="29.4" x="-45.045" y="20.029" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="f" width="79.579" height="29.4" x="-43.513" y="21.178" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="g" width="74.749" height="58.852" x="15.756" y="-17.901" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="h" width="61.377" height="25.362" x="23.548" y="2.284" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="i" width="61.377" height="25.362" x="23.548" y="2.284" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="j" width="56.045" height="63.649" x="-27.636" y="-22.853" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="k" width="54.814" height="64.646" x="20.116" y="-38.415" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="l" width="33.541" height="35.313" x="24.641" y="-11.323" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="m" width="54.814" height="64.646" x="-29.286" y="6.009" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="n" width="54.814" height="64.646" x="-29.286" y="6.009" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="o" width="54.814" height="64.646" x="8.244" y="-2.416" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="p" width="39.409" height="43.623" x="18.713" y="10.588" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter></defs></svg>
@@ -406,6 +280,279 @@ export default function ProtectedRoute({ children }) {
 }
 </file>
 
+<file path="src/components/TransactionModal.jsx">
+import React from 'react';
+import { X, Calendar, IndianRupee, Hash, FileText, ChevronDown } from 'lucide-react';
+
+export default function TransactionModal({
+    isOpen,
+    onClose,
+    onSubmit,
+    type = "Advance", // "Advance" or "BossDeposit"
+    editId = null,
+    formData,
+    setFormData,
+    workers = [],
+    isWorkerDropdownOpen,
+    setIsWorkerDropdownOpen,
+    isReasonDropdownOpen,
+    setIsReasonDropdownOpen,
+    EDIT_REASONS = [],
+    isSubmitting = false,
+    isWaitingForUpi = false,
+    pendingUpiData = null,
+    onCancelUpi = null
+}) {
+    if (!isOpen) return null;
+
+    const isAdvance = type === "Advance";
+    const primaryColor = isAdvance ? "#9D0052" : "#0E793C";
+    const hoverColor = isAdvance ? "#800043" : "#0A5C2D";
+    const selectedWorker = workers.find(w => (w._id || w.id) === formData.selectedWorkerId);
+
+    return (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end max-w-md mx-auto">
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={onClose} />
+            
+            {/* Bottom Sheet Card */}
+            <div className="relative bg-white rounded-t-2xl px-5 pt-4 pb-8 animate-slide-up-bottom shadow-[0_-4px_24px_rgba(0,0,0,0.12)]">
+                <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4 shrink-0" />
+                
+                {/* Header */}
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
+                        {isAdvance ? (editId ? "Edit Advance" : "Log Advance") : (editId ? "Edit Deposit" : "Log Deposit")}
+                    </h2>
+                    <button onClick={onClose} className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center transition hover:bg-gray-200">
+                        <X className="w-3.5 h-3.5 text-gray-500" />
+                    </button>
+                </div>
+
+                <div className="overflow-y-auto max-h-[75vh]" style={{ scrollbarWidth: 'none' }}>
+                    <form id="universalTransactionForm" onSubmit={onSubmit}>
+                        
+                        {/* Amount Field */}
+                        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Amount (₹)</label>
+                        <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 mb-3 bg-white focus-within:border-[var(--theme-color)]" style={{ '--theme-color': primaryColor }}>
+                            <IndianRupee className="w-5 h-5 shrink-0" style={{ color: primaryColor }} />
+                            <input 
+                                type="number" 
+                                required 
+                                value={formData.amount} 
+                                onChange={(e) => setFormData({...formData, amount: e.target.value})} 
+                                placeholder="0" 
+                                className="flex-1 text-2xl font-extrabold text-gray-900 outline-none placeholder-gray-300 bg-transparent w-full" 
+                            />
+                        </div>
+
+                        {/* Payment Method Tabs */}
+                        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Payment Method</label>
+                        <div className="flex gap-2 mb-3">
+                            {['Cash', 'Online', 'Check', 'Other'].map((method) => {
+                                const isSelected = formData.paymentMethod === method;
+                                return (
+                                    <button
+                                        key={method}
+                                        type="button"
+                                        onClick={() => setFormData({...formData, paymentMethod: method})}
+                                        className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-colors ${
+                                            isSelected ? 'text-white' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                                        }`}
+                                        style={{ backgroundColor: isSelected ? primaryColor : undefined, borderColor: isSelected ? primaryColor : undefined }}
+                                    >
+                                        {method}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* Worker Selector (Only for Advances) */}
+                        {isAdvance && (
+                            <div className="mb-3 relative">
+                                <label className="block text-[11px] font-semibold text-gray-400 uppercase mb-1">Worker</label>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsWorkerDropdownOpen(!isWorkerDropdownOpen)}
+                                    className="w-full border border-gray-200 rounded-lg p-3 flex justify-between text-sm bg-white"
+                                >
+                                    <span className={selectedWorker ? "text-gray-900 font-semibold" : "text-gray-400"}>
+                                        {selectedWorker?.name || "-- Select Active Worker --"}
+                                    </span>
+                                    <ChevronDown size={16} style={{ color: primaryColor }} />
+                                </button>
+
+                                {isWorkerDropdownOpen && (
+                                    <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-40 overflow-y-auto mt-1">
+                                        {workers.filter(w => w.isActive !== false).map(w => (
+                                            <button
+                                                key={w._id || w.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    setFormData({...formData, selectedWorkerId: w._id || w.id});
+                                                    setIsWorkerDropdownOpen(false);
+                                                }}
+                                                className="block w-full text-left p-3 text-sm hover:bg-gray-50 font-medium"
+                                            >
+                                                {w.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Date & Time Row */}
+                        <div className="flex gap-2 mb-3">
+                            <div className="flex-1">
+                                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Date</label>
+                                <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 bg-white">
+                                    <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
+                                    <input 
+                                        type="date" 
+                                        value={formData.entryDate} 
+                                        onChange={(e) => setFormData({...formData, entryDate: e.target.value})} 
+                                        className="flex-1 text-sm font-semibold text-gray-800 outline-none bg-transparent min-w-0" 
+                                    />
+                                </div>
+                            </div>
+                            <div className="w-32">
+                                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Time</label>
+                                <div className="border border-gray-200 rounded-lg px-3 py-2.5 bg-white flex items-center">
+                                    <input 
+                                        type="time" 
+                                        value={formData.entryTime} 
+                                        onChange={(e) => setFormData({...formData, entryTime: e.target.value})} 
+                                        className="w-full text-sm font-semibold text-gray-800 outline-none bg-transparent" 
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Transaction ID (Only for Boss Deposits) */}
+                        {!isAdvance && (
+                            <>
+                                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">
+                                    Transaction ID <span className="normal-case tracking-normal font-medium">(Optional)</span>
+                                </label>
+                                <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 mb-3 bg-white">
+                                    <Hash className="w-4 h-4 text-gray-400 shrink-0" />
+                                    <input 
+                                        type="text" 
+                                        value={formData.transactionId} 
+                                        onChange={(e) => setFormData({...formData, transactionId: e.target.value})} 
+                                        placeholder="Bank or UPI reference" 
+                                        className="flex-1 text-sm font-semibold text-gray-800 outline-none placeholder-gray-400 bg-transparent w-full" 
+                                    />
+                                </div>
+                            </>
+                        )}
+
+                        {/* Description / Notes */}
+                        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Description / Notes</label>
+                        <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-start gap-2 mb-4 bg-white">
+                            <FileText className="w-4 h-4 shrink-0 mt-0.5" style={{ color: primaryColor }} />
+                            <textarea 
+                                value={formData.notes} 
+                                onChange={(e) => setFormData({...formData, notes: e.target.value})} 
+                                rows={2} 
+                                placeholder="Add details..." 
+                                className="flex-1 text-sm text-gray-800 outline-none resize-none placeholder-gray-400 bg-transparent" 
+                            />
+                        </div>
+
+                        {/* Reason for Edit (Only when editing) */}
+                        {editId && (
+                            <div className="mb-4 relative">
+                                <label className="block text-[11px] font-bold uppercase tracking-widest mb-1" style={{ color: primaryColor }}>
+                                    Reason for Edit *
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsReasonDropdownOpen(!isReasonDropdownOpen)}
+                                    className="w-full border-2 rounded-lg px-3 py-2.5 flex items-center justify-between text-sm font-semibold text-gray-900 bg-white"
+                                    style={{ borderColor: `${primaryColor}33` }}
+                                >
+                                    <span className={formData.reason ? "text-gray-900" : "text-gray-400"}>
+                                        {formData.reason || "Select a reason..."}
+                                    </span>
+                                    <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${isReasonDropdownOpen ? 'rotate-180' : ''}`} style={{ color: primaryColor }} />
+                                </button>
+
+                                {isReasonDropdownOpen && (
+                                    <div className="absolute bottom-full left-0 mb-1.5 z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto py-1">
+                                        {EDIT_REASONS.map((r) => (
+                                            <button
+                                                key={r}
+                                                type="button"
+                                                onClick={() => {
+                                                    setFormData({ ...formData, reason: r });
+                                                    setIsReasonDropdownOpen(false);
+                                                }}
+                                                className={`block w-full text-left px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                                                    formData.reason === r ? 'font-bold' : 'text-gray-700 hover:bg-gray-50'
+                                                }`}
+                                                style={{ color: formData.reason === r ? primaryColor : undefined, backgroundColor: formData.reason === r ? `${primaryColor}10` : undefined }}
+                                            >
+                                                {r}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </form>
+                </div>
+
+                {/* Submit / Action Button */}
+                {isWaitingForUpi && pendingUpiData ? (
+                    <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4 text-center space-y-3 mt-2 animate-fade-in">
+                        <p className="text-sm font-bold text-gray-900 leading-snug">
+                            Confirm transfer of <span className="text-[#C0392B]">₹{pendingUpiData.amount}</span> to <span className="text-[#1048A4]">{pendingUpiData.workerName}</span>?
+                        </p>
+                        <div className="flex gap-2">
+                            <button 
+                                type="button"
+                                onClick={onCancelUpi}
+                                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm font-bold py-3 rounded-xl transition"
+                            >
+                                No (Cancel)
+                            </button>
+                            <button 
+                                type="button"
+                                disabled={isSubmitting}
+                                onClick={onSubmit}
+                                className="flex-1 text-white text-sm font-bold py-3 rounded-xl transition shadow-md bg-[#0E793C] hover:bg-[#0A5C2D]"
+                            >
+                                {isSubmitting ? "RECORDING..." : "Yes (Complete & Save)"}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <button 
+                        type="submit" 
+                        form="universalTransactionForm" 
+                        disabled={isSubmitting} 
+                        className="w-full text-white text-sm font-bold rounded-xl py-3.5 tracking-wider uppercase transition-all active:scale-[0.99] disabled:opacity-70 shadow-md"
+                        style={{ backgroundColor: isAdvance && formData.paymentMethod === 'Online' ? '#1A73E8' : primaryColor }}
+                    >
+                        {isSubmitting 
+                            ? "SAVING..." 
+                            : editId 
+                                ? "SAVE CHANGES" 
+                                : isAdvance && formData.paymentMethod === 'Online' 
+                                    ? `PAY ₹${formData.amount || 0} ON GPAY` 
+                                    : isAdvance 
+                                        ? "SAVE ADVANCE" 
+                                        : "SAVE DEPOSIT"}
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+}
+</file>
+
 <file path="src/components/WorkerRow.jsx">
 import React from 'react';
 import { Edit } from 'lucide-react'; 
@@ -514,6 +661,133 @@ const WorkerRow = ({worker, dayStatus, nightStatus, shift, onStatusChange, onEdi
 }
 
 export default WorkerRow;
+</file>
+
+<file path="src/lib/qrUtils.js">
+import jsQR from "jsqr";
+import QRCode from "qrcode";
+import { Capacitor } from "@capacitor/core";
+import { Share } from "@capacitor/share";
+import { Filesystem, Directory } from "@capacitor/filesystem";
+
+// 1. Reads a QR code image file and extracts the exact UPI string or VPA
+export const decodeUpiFromQrImage = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+
+        // Scale down huge phone screenshots to max 800px so jsQR reads them fast & accurately
+        const MAX_DIM = 800;
+        let width = img.width;
+        let height = img.height;
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          } else {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+        if (code && code.data && code.data.toLowerCase().includes("upi://pay")) {
+          // Extract the 'pa' (VPA) parameter or save the clean VPA
+          try {
+            const url = new URL(code.data);
+            const pa = url.searchParams.get("pa");
+            resolve(pa || code.data);
+          } catch {
+            resolve(code.data);
+          }
+        } else {
+          reject(new Error("No valid UPI QR code found in this image."));
+        }
+      };
+      img.onerror = () => reject(new Error("Failed to load image."));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error("Failed to read file."));
+    reader.readAsDataURL(file);
+  });
+};
+
+// 2. Generates a high-contrast QR Image DataURL with the exact amount baked in
+export const generateDynamicUpiQrDataUrl = async ({ upiId, workerName, amount, note }) => {
+  // Clean VPA if full upi:// string was stored
+  let cleanPa = upiId;
+  if (upiId.startsWith("upi://")) {
+    try {
+      const parsed = new URL(upiId);
+      cleanPa = parsed.searchParams.get("pa") || upiId;
+    } catch {}
+  }
+
+  const formattedAmount = Number(amount).toFixed(2);
+  const upiString = `upi://pay?pa=${encodeURIComponent(cleanPa)}&pn=${encodeURIComponent(
+    workerName || "Worker"
+  )}&am=${formattedAmount}&cu=INR&tn=${encodeURIComponent(note || "Worker Advance")}`;
+
+  // Generate a 600x600 crisp PNG QR code with wide white margins (vital for GPay scanner)
+  const dataUrl = await QRCode.toDataURL(upiString, {
+    width: 600,
+    margin: 4,
+    color: {
+      dark: "#000000",
+      light: "#FFFFFF",
+    },
+  });
+
+  return { dataUrl, upiString, cleanPa };
+};
+
+// 3. Shares the generated QR image directly to Google Pay / PhonePe on Android
+export const shareQrImageToUpiApp = async (dataUrl, workerName, amount) => {
+  // Copy amount to clipboard as an extra safety net
+  try {
+    await navigator.clipboard.writeText(String(amount));
+  } catch {}
+
+  if (Capacitor.isNativePlatform()) {
+    // Native Android APK: Write temp PNG to cache and open native Android Share Sheet
+    const base64Data = dataUrl.split(",")[1];
+    const fileName = `upi_qr_${Date.now()}.png`;
+
+    const savedFile = await Filesystem.writeFile({
+      path: fileName,
+      data: base64Data,
+      directory: Directory.Cache,
+    });
+
+    await Share.share({
+      title: `Pay ₹${amount} to ${workerName}`,
+      text: `Scan with Google Pay or PhonePe to pay ₹${amount} to ${workerName}`,
+      url: savedFile.uri,
+      dialogTitle: "Select Google Pay / PhonePe to Scan QR",
+    });
+  } else if (navigator.canShare) {
+    // Mobile Chrome Web Fallback
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    const file = new File([blob], "payment_qr.png", { type: "image/png" });
+    if (navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        title: `Pay ₹${amount} to ${workerName}`,
+        files: [file],
+      });
+    }
+  }
+};
 </file>
 
 <file path="src/pages/DateSelectorPage.jsx">
@@ -1804,264 +2078,6 @@ export default defineConfig({
 })
 </file>
 
-<file path="src/pages/EditWorker.jsx">
-import React, { useEffect, useState, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { api } from '../lib/api';
-import { ArrowLeft, User, Phone, AtSign, Camera, Trash2, UserCheck, ChevronRight, QrCode } from 'lucide-react';
-import { decodeUpiFromQrImage } from '../lib/qrUtils';
-import toast, { Toaster } from "react-hot-toast";
-import { mutate } from 'swr';
-
-const EditWorker = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const fileInputRef = useRef(null);
-
-  const workerToEdit = location.state?.worker;
-  const workerId = workerToEdit?._id || workerToEdit?.id;
-
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [upiId, setUpiId] = useState("");
-  const [photoPreview, setPhotoPreview] = useState(null);
-  const [isActive, setIsActive] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  useEffect(() => {
-    if (workerToEdit) {
-      setName(workerToEdit.name || '');
-      setPhone(workerToEdit.phoneNumber || "");
-      setUpiId(workerToEdit.upiId || "");
-      setIsActive(workerToEdit.isActive !== false);
-    } else {
-      toast.error("No worker selected!");
-      navigate('/dashboard');
-    }
-  }, [workerToEdit, navigate]);
-
-  const handlePhotoUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      // Create a local preview URL for the selected image
-      const previewUrl = URL.createObjectURL(file);
-      setPhotoPreview(previewUrl);
-      toast.success("Photo attached! (Save to upload)");
-      // Note: To fully save to MongoDB, you'd upload this file to Firebase Storage/AWS S3 and save the URL.
-    }
-  };
-
-  const handleUpdate = async () => {
-  if (!name.trim()) return toast.error("Worker name cannot be empty!");
-  if (phone.length !== 10) return toast.error("Phone number must be 10 digits!");
-
-  try {
-    setIsSaving(true);
-
-    // Pass upiId along with name and phone
-    await api.put(`/workers/${workerId}`, { 
-        name: name.trim(), 
-        phoneNumber: phone, 
-        upiId, 
-        isActive 
-    });
-
-    mutate('/workers');
-    mutate('/workers?includeInactive=true');
-    mutate(`/workers/${workerId}`); // 💡 Immediately updates WorkerLedger header!
-    toast.success("Profile saved!");
-    navigate(-1);
-    } catch (error) {
-      console.error("Error updating worker:", error);
-      toast.error("Failed to save profile.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleToggleStatus = async () => {
-    try {
-      setIsDeleting(true);
-      const newStatus = !isActive;
-      
-      await api.put(`/workers/${workerId}`, { name, phoneNumber: phone, upiId, isActive: newStatus });
-      
-      mutate('/workers');
-      mutate('/workers?includeInactive=true');
-      mutate(`/workers/${workerId}`);
-      toast.success(`Worker ${newStatus ? 'reactivated' : 'deactivated'}!`);
-      setTimeout(() => navigate('/dashboard'), 500);
-    } catch (error) {
-      toast.error('Error updating worker status');
-      setIsDeleting(false);
-    }
-  };
-
-  return (
-    <div className='fixed inset-0 flex flex-col bg-gray-50 overflow-hidden font-sans z-50 animate-slide-in-right'>
-      <Toaster position="top-center" />
-
-      {/* 1. Khatabook Style Blue Header */}
-      <header className='bg-[#1048A4] text-white px-4 py-4 flex items-center justify-between shrink-0 shadow-sm z-10'>
-        <div className='flex items-center gap-4'>
-          <button onClick={() => navigate(-1)} className='active:scale-95 transition p-1'>
-            <ArrowLeft size={24} />
-          </button>
-          <h1 className='text-[18px] font-semibold tracking-wide'>Worker Profile</h1>
-        </div>
-        <button 
-            onClick={handleUpdate}
-            disabled={isSaving}
-            className='text-sm font-bold uppercase tracking-wider bg-white/20 px-3 py-1.5 rounded active:bg-white/30 transition disabled:opacity-50'
-        >
-            {isSaving ? "Saving..." : "Save"}
-        </button>
-      </header>
-
-      <div className='flex-1 overflow-y-auto pb-24'>
-        
-        {/* 2. Photo Upload Section */}
-        <div className='bg-gray-50 flex flex-col items-center py-8 border-b border-gray-200'>
-          <div className='relative'>
-            {/* Avatar Circle */}
-            <div className='w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center text-gray-400 overflow-hidden border-2 border-white shadow-sm'>
-              {photoPreview ? (
-                <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
-              ) : (
-                <User size={48} className="text-gray-400" />
-              )}
-            </div>
-            
-            {/* Camera Icon Badge */}
-            <button 
-                onClick={() => fileInputRef.current?.click()}
-                className='absolute bottom-0 right-0 bg-[#1048A4] p-2 rounded-full text-white border-2 border-white shadow-md active:scale-95 transition'
-            >
-              <Camera size={14} />
-            </button>
-          </div>
-          
-          {/* Hidden File Input (Opens Camera/Gallery natively on mobile) */}
-          <input 
-              type="file" 
-              accept="image/*" 
-              ref={fileInputRef} 
-              onChange={handlePhotoUpload} 
-              className="hidden" 
-          />
-          
-          <button 
-              onClick={() => fileInputRef.current?.click()}
-              className='text-[#1048A4] text-sm font-semibold mt-3'
-          >
-              Add photo
-          </button>
-        </div>
-
-        {/* 3. Editable Fields List */}
-        <div className='bg-white border-b border-gray-200'>
-          
-          {/* Name Row */}
-          <div className='flex items-center px-4 py-3 border-b border-gray-100 group'>
-            <User className='w-5 h-5 text-gray-400 shrink-0 mr-4' />
-            <div className='flex-1 min-w-0'>
-              <label className='text-[11px] text-gray-500 font-medium'>Name</label>
-              <input 
-                  type="text" 
-                  value={name} 
-                  onChange={(e) => setName(e.target.value)} 
-                  className='w-full text-[15px] font-semibold text-gray-900 outline-none bg-transparent pb-1 placeholder-gray-300' 
-              />
-            </div>
-            <ChevronRight className='w-4 h-4 text-gray-300' />
-          </div>
-
-          {/* Phone Row */}
-          <div className='flex items-center px-4 py-3 border-b border-gray-100'>
-            <Phone className='w-5 h-5 text-gray-400 shrink-0 mr-4' />
-            <div className='flex-1 min-w-0'>
-              <label className='text-[11px] text-gray-500 font-medium'>Mobile Number</label>
-              <input 
-                  type="tel" 
-                  value={phone} 
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} 
-                  className='w-full text-[15px] font-semibold text-gray-900 outline-none bg-transparent pb-1 placeholder-gray-300' 
-              />
-            </div>
-            <ChevronRight className='w-4 h-4 text-gray-300' />
-          </div>
-
-              {/* UPI ID Row */}
-              <div className='flex items-center px-4 py-3'>
-                <AtSign className='w-5 h-5 text-gray-400 shrink-0 mr-4' />
-                <div className='flex-1 min-w-0'>
-                  <label className='text-[11px] text-gray-500 font-medium'>UPI ID (Or tap QR icon to scan image)</label>
-                  <input 
-                      type="text" 
-                      value={upiId} 
-                      placeholder="e.g. 9876543210@ybl"
-                      onChange={(e) => setUpiId(e.target.value.trim().toLowerCase())} 
-                      className='w-full text-[15px] font-semibold text-gray-900 outline-none bg-transparent pb-1 placeholder-gray-300' 
-                  />
-                </div>
-                <label className="p-2 bg-blue-50 text-[#1048A4] rounded-lg cursor-pointer active:scale-95 transition flex items-center gap-1 text-xs font-bold">
-                  <QrCode className="w-4 h-4" />
-                  <span>Scan QR</span>
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    className="hidden"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      try {
-                        const extracted = await decodeUpiFromQrImage(file);
-                        setUpiId(extracted);
-                        toast.success(`QR Decoded: ${extracted}`);
-                      } catch (err) {
-                        toast.error(err.message);
-                      }
-                    }}
-                  />
-                </label>
-              </div>
-
-        </div>
-
-        {/* 4. Deactivate Button (Matches Khatabook red outline style) */}
-        <div className='mt-8 px-4'>
-            <p className="text-[11px] text-gray-400 font-semibold mb-2 ml-1 uppercase tracking-wider">Worker Settings</p>
-            <button
-                type='button'
-                disabled={isDeleting}
-                onClick={handleToggleStatus}
-                className={`w-full py-3.5 rounded-lg border flex items-center justify-center gap-2 text-sm font-bold transition active:scale-[0.98] disabled:opacity-50 ${
-                    isActive 
-                        ? 'border-red-500 text-red-600 bg-white hover:bg-red-50' 
-                        : 'border-green-600 text-green-700 bg-white hover:bg-green-50'
-                }`}
-            >
-                {isDeleting ? "Updating..." : isActive ? (
-                    <>
-                        <Trash2 size={18} /> DEACTIVATE WORKER
-                    </>
-                ) : (
-                    <>
-                        <UserCheck size={18} /> REACTIVATE WORKER
-                    </>
-                )}
-            </button>
-        </div>
-
-      </div>
-    </div>
-  );
-};
-
-export default EditWorker;
-</file>
-
 <file path="src/pages/Expenses.jsx">
 import React, { useEffect, useRef, useState } from 'react'
 import { api, fetcher } from '../lib/api';
@@ -2724,6 +2740,299 @@ const handleSave = async () => {
 }
 </file>
 
+<file path="src/lib/api.js">
+import axios from "axios";
+import { auth } from "../firebase";
+
+const baseURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? `http://${window.location.hostname}:5000/api` : "");
+if (!baseURL) {
+  console.error("CRITICAL: VITE_API_URL environment variable is missing in production build!");
+}
+
+export const api = axios.create({
+  baseURL,
+  headers: { "Content-Type": "application/json" },
+});
+
+api.interceptors.request.use(
+  async (config) => {
+    if (auth.currentUser) {
+      const token = await auth.currentUser.getIdToken();
+      localStorage.setItem("authToken", token);
+      config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      const token = localStorage.getItem("authToken");
+      if (token) config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+export const fetcher = (url) => api.get(url).then(res => {
+  if (typeof res.data === "string") throw new Error("Bad API URL or HTML response received");
+  return res.data;
+});
+</file>
+
+<file path="src/pages/EditWorker.jsx">
+import React, { useEffect, useState, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { api } from '../lib/api';
+import { ArrowLeft, User, Phone, AtSign, Camera, Trash2, UserCheck, ChevronRight, QrCode } from 'lucide-react';
+import { decodeUpiFromQrImage } from '../lib/qrUtils';
+import toast, { Toaster } from "react-hot-toast";
+import { mutate } from 'swr';
+
+const EditWorker = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const fileInputRef = useRef(null);
+
+  const workerToEdit = location.state?.worker;
+  const workerId = workerToEdit?._id || workerToEdit?.id;
+
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [upiId, setUpiId] = useState("");
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [isActive, setIsActive] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    if (workerToEdit) {
+      setName(workerToEdit.name || '');
+      setPhone(workerToEdit.phoneNumber || "");
+      setUpiId(workerToEdit.upiId || "");
+      setIsActive(workerToEdit.isActive !== false);
+    } else {
+      toast.error("No worker selected!");
+      navigate('/dashboard');
+    }
+  }, [workerToEdit, navigate]);
+
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Create a local preview URL for the selected image
+      const previewUrl = URL.createObjectURL(file);
+      setPhotoPreview(previewUrl);
+      toast.success("Photo attached! (Save to upload)");
+      // Note: To fully save to MongoDB, you'd upload this file to Firebase Storage/AWS S3 and save the URL.
+    }
+  };
+
+  const handleUpdate = async () => {
+  if (!name.trim()) return toast.error("Worker name cannot be empty!");
+  if (phone.length !== 10) return toast.error("Phone number must be 10 digits!");
+
+  try {
+    setIsSaving(true);
+
+    // Pass upiId along with name and phone
+    await api.put(`/workers/${workerId}`, { 
+        name: name.trim(), 
+        phoneNumber: phone, 
+        upiId, 
+        isActive 
+    });
+
+    mutate('/workers');
+    mutate('/workers?includeInactive=true');
+    mutate(`/workers/${workerId}`); // 💡 Immediately updates WorkerLedger header!
+    toast.success("Profile saved!");
+    navigate(-1);
+    } catch (error) {
+      console.error("Error updating worker:", error);
+      toast.error("Failed to save profile.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleStatus = async () => {
+    try {
+      setIsDeleting(true);
+      const newStatus = !isActive;
+      
+      await api.put(`/workers/${workerId}`, { name, phoneNumber: phone, upiId, isActive: newStatus });
+      
+      mutate('/workers');
+      mutate('/workers?includeInactive=true');
+      mutate(`/workers/${workerId}`);
+      toast.success(`Worker ${newStatus ? 'reactivated' : 'deactivated'}!`);
+      setTimeout(() => navigate('/dashboard'), 500);
+    } catch (error) {
+      toast.error('Error updating worker status');
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <div className='fixed inset-0 flex flex-col bg-gray-50 overflow-hidden font-sans z-50 animate-slide-in-right'>
+      <Toaster position="top-center" />
+
+      {/* 1. Khatabook Style Blue Header */}
+      <header className='bg-[#1048A4] text-white px-4 py-4 flex items-center justify-between shrink-0 shadow-sm z-10'>
+        <div className='flex items-center gap-4'>
+          <button onClick={() => navigate(-1)} className='active:scale-95 transition p-1'>
+            <ArrowLeft size={24} />
+          </button>
+          <h1 className='text-[18px] font-semibold tracking-wide'>Worker Profile</h1>
+        </div>
+        <button 
+            onClick={handleUpdate}
+            disabled={isSaving}
+            className='text-sm font-bold uppercase tracking-wider bg-white/20 px-3 py-1.5 rounded active:bg-white/30 transition disabled:opacity-50'
+        >
+            {isSaving ? "Saving..." : "Save"}
+        </button>
+      </header>
+
+      <div className='flex-1 overflow-y-auto pb-24'>
+        
+        {/* 2. Photo Upload Section */}
+        <div className='bg-gray-50 flex flex-col items-center py-8 border-b border-gray-200'>
+          <div className='relative'>
+            {/* Avatar Circle */}
+            <div className='w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center text-gray-400 overflow-hidden border-2 border-white shadow-sm'>
+              {photoPreview ? (
+                <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <User size={48} className="text-gray-400" />
+              )}
+            </div>
+            
+            {/* Camera Icon Badge */}
+            <button 
+                onClick={() => fileInputRef.current?.click()}
+                className='absolute bottom-0 right-0 bg-[#1048A4] p-2 rounded-full text-white border-2 border-white shadow-md active:scale-95 transition'
+            >
+              <Camera size={14} />
+            </button>
+          </div>
+          
+          {/* Hidden File Input (Opens Camera/Gallery natively on mobile) */}
+          <input 
+              type="file" 
+              accept="image/*" 
+              ref={fileInputRef} 
+              onChange={handlePhotoUpload} 
+              className="hidden" 
+          />
+          
+          <button 
+              onClick={() => fileInputRef.current?.click()}
+              className='text-[#1048A4] text-sm font-semibold mt-3'
+          >
+              Add photo
+          </button>
+        </div>
+
+        {/* 3. Editable Fields List */}
+        <div className='bg-white border-b border-gray-200'>
+          
+          {/* Name Row */}
+          <div className='flex items-center px-4 py-3 border-b border-gray-100 group'>
+            <User className='w-5 h-5 text-gray-400 shrink-0 mr-4' />
+            <div className='flex-1 min-w-0'>
+              <label className='text-[11px] text-gray-500 font-medium'>Name</label>
+              <input 
+                  type="text" 
+                  value={name} 
+                  onChange={(e) => setName(e.target.value)} 
+                  className='w-full text-[15px] font-semibold text-gray-900 outline-none bg-transparent pb-1 placeholder-gray-300' 
+              />
+            </div>
+            <ChevronRight className='w-4 h-4 text-gray-300' />
+          </div>
+
+          {/* Phone Row */}
+          <div className='flex items-center px-4 py-3 border-b border-gray-100'>
+            <Phone className='w-5 h-5 text-gray-400 shrink-0 mr-4' />
+            <div className='flex-1 min-w-0'>
+              <label className='text-[11px] text-gray-500 font-medium'>Mobile Number</label>
+              <input 
+                  type="tel" 
+                  value={phone} 
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} 
+                  className='w-full text-[15px] font-semibold text-gray-900 outline-none bg-transparent pb-1 placeholder-gray-300' 
+              />
+            </div>
+            <ChevronRight className='w-4 h-4 text-gray-300' />
+          </div>
+
+              {/* UPI ID Row */}
+              <div className='flex items-center px-4 py-3'>
+                <AtSign className='w-5 h-5 text-gray-400 shrink-0 mr-4' />
+                <div className='flex-1 min-w-0'>
+                  <label className='text-[11px] text-gray-500 font-medium'>UPI ID (Or tap QR icon to scan image)</label>
+                  <input 
+                      type="text" 
+                      value={upiId} 
+                      placeholder="e.g. 9876543210@ybl"
+                      onChange={(e) => setUpiId(e.target.value.trim().toLowerCase())} 
+                      className='w-full text-[15px] font-semibold text-gray-900 outline-none bg-transparent pb-1 placeholder-gray-300' 
+                  />
+                </div>
+                <label className="p-2 bg-blue-50 text-[#1048A4] rounded-lg cursor-pointer active:scale-95 transition flex items-center gap-1 text-xs font-bold">
+                  <QrCode className="w-4 h-4" />
+                  <span>Scan QR</span>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const extracted = await decodeUpiFromQrImage(file);
+                        setUpiId(extracted);
+                        toast.success(`QR Decoded: ${extracted}`);
+                      } catch (err) {
+                        toast.error(err.message);
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+
+        </div>
+
+        {/* 4. Deactivate Button (Matches Khatabook red outline style) */}
+        <div className='mt-8 px-4'>
+            <p className="text-[11px] text-gray-400 font-semibold mb-2 ml-1 uppercase tracking-wider">Worker Settings</p>
+            <button
+                type='button'
+                disabled={isDeleting}
+                onClick={handleToggleStatus}
+                className={`w-full py-3.5 rounded-lg border flex items-center justify-center gap-2 text-sm font-bold transition active:scale-[0.98] disabled:opacity-50 ${
+                    isActive 
+                        ? 'border-red-500 text-red-600 bg-white hover:bg-red-50' 
+                        : 'border-green-600 text-green-700 bg-white hover:bg-green-50'
+                }`}
+            >
+                {isDeleting ? "Updating..." : isActive ? (
+                    <>
+                        <Trash2 size={18} /> DEACTIVATE WORKER
+                    </>
+                ) : (
+                    <>
+                        <UserCheck size={18} /> REACTIVATE WORKER
+                    </>
+                )}
+            </button>
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
+export default EditWorker;
+</file>
+
 <file path="package.json">
 {
   "name": "expenseengine-frontend",
@@ -2774,600 +3083,6 @@ const handleSave = async () => {
     "tailwindcss": "^4.3.3",
     "vite": "^8.2.0"
   }
-}
-</file>
-
-<file path="src/lib/api.js">
-import axios from "axios";
-import { auth } from "../firebase";
-
-const baseURL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? `http://${window.location.hostname}:5000/api` : "");
-if (!baseURL) {
-  console.error("CRITICAL: VITE_API_URL environment variable is missing in production build!");
-}
-
-export const api = axios.create({
-  baseURL,
-  headers: { "Content-Type": "application/json" },
-});
-
-api.interceptors.request.use(
-  async (config) => {
-    if (auth.currentUser) {
-      const token = await auth.currentUser.getIdToken();
-      localStorage.setItem("authToken", token);
-      config.headers.Authorization = `Bearer ${token}`;
-    } else {
-      const token = localStorage.getItem("authToken");
-      if (token) config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-export const fetcher = (url) => api.get(url).then(res => {
-  if (typeof res.data === "string") throw new Error("Bad API URL or HTML response received");
-  return res.data;
-});
-</file>
-
-<file path="src/pages/WorkerLedger.jsx">
-import React, { useState, useMemo } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import useSWR, { mutate } from 'swr';
-import { api, fetcher } from '../lib/api';
-import dayjs from 'dayjs';
-import toast from 'react-hot-toast';
-import { ArrowLeft, Pencil, ChevronDown, Plus, X, Calendar, Clock3, IndianRupee, FileText } from 'lucide-react';
-
-const WorkerLedger = () => {
-    const { id } = useParams();
-    const navigate = useNavigate();
-    const location = useLocation();
-    
-    // SWR Fetchers placed at the top
-    const { data: workerData } = useSWR(`/workers/${id}`, fetcher);
-    const { data: ledgerHistory = [], isLoading } = useSWR(`/ledger/worker/${id}`, fetcher);
-    
-    // Grab data safely after fetchers
-    const workerName = workerData?.name || location.state?.workerName || "Worker";
-    const isActive = workerData ? workerData.isActive !== false : location.state?.isActive !== false;
-
-    // UI States
-    const [profilePeriod, setProfilePeriod] = useState(dayjs().format('MMM YYYY'));
-    const [isEditMode, setIsEditMode] = useState(false);
-    
-    // Edit Modal States
-    const [showModal, setShowModal] = useState(false);
-    const [editId, setEditId] = useState(null);
-    const [formData, setFormData] = useState({ amount: '', notes: '', reason: '', paymentMethod: 'Cash' });
-    const [isSaving, setIsSaving] = useState(false);
-    const EDIT_REASONS = ["Amount correction", "Date correction", "Payment method correction" ,"Duplicate entry", "Other"];
-    const [isReasonDropdownOpen, setIsReasonDropdownOpen] = useState(false);
-    const [entryDate, setEntryDate] = useState(dayjs().format('YYYY-MM-DD'));
-    const [entryTime, setEntryTime] = useState(dayjs().format('HH:mm'));
-    // 🚨 BUG FIX 1: Ensure ledgerHistory is always treated as an array so .filter() doesn't crash
-    const safeHistory = Array.isArray(ledgerHistory) ? ledgerHistory : [];
-
-    // Filter math for the selected month
-    // 🚨 BUG FIX: Safe Filter Math for the selected month
-    const visibleEntries = safeHistory.filter(entry => {
-        // Fallback to createdAt if date is missing
-        const recordDate = entry.date || entry.createdAt; 
-        if (!recordDate) return false;
-        
-        // Convert the database date to match the "MMM YYYY" dropdown exactly
-        const entryMonthYear = dayjs(recordDate).format('MMM YYYY');
-        return entryMonthYear === profilePeriod;
-    });
-
-    const periodTotal = visibleEntries.reduce((sum, e) => sum + e.amount, 0);
-    const totalAdvance = safeHistory.reduce((sum, e) => sum + e.amount, 0);
-    // 🚨 BUG FIX 2: Use dayjs to generate the dropdown options so they match the filter perfectly
-    const monthOptions = useMemo(() => {
-        return Array.from({ length: 12 }).map((_, i) => 
-            dayjs().subtract(i, 'month').format('MMM YYYY')
-        );
-    }, []);
-
-    const formatMoney = (amount) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(amount);
-
-    // Unified Handle Save (Add & Edit)
-    const handleSave = async (e) => {
-        e.preventDefault();
-        if (!formData.amount) return toast.error("Amount required!");
-        if (editId && !formData.reason) return toast.error("Reason for Edit is required!");
-
-        try {
-            setIsSaving(true);
-            const payload = {
-                amount: Number(formData.amount),
-                paymentMethod: formData.paymentMethod || "Cash",
-                description: formData.notes,
-                date: dayjs(`${entryDate}T${entryTime}`).toISOString()
-            };
-
-            if (editId) {
-                payload.isEdited = true;
-                payload.editReason = formData.reason;
-                await api.put(`/ledger/${editId}`, payload);
-                toast.success("Transaction updated!");
-            } else {
-                payload.entryType = "Advance";
-                payload.workerId = id;
-                await api.post('/ledger', payload);
-                toast.success("Advance logged!");
-            }
-
-            setShowModal(false);
-            setEditId(null);
-            setFormData({ amount: '', notes: '', reason: '', paymentMethod: 'Cash' });
-            
-            // Instantly refresh this page AND the cashbook cache
-            mutate(`/ledger/worker/${id}`);
-            mutate('/ledger'); 
-        } catch (error) {
-            toast.error("Failed to save.");
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    const openEditModal = (entry) => {
-
-        setEntryDate(dayjs(entry.date).format('YYYY-MM-DD'));
-        setEntryTime(dayjs(entry.date).format('HH:mm'));
-        setEditId(entry._id);
-        setFormData({ 
-            amount: entry.amount.toString(), 
-            notes: entry.description || "", 
-            reason: entry.editReason || "",
-            paymentMethod: entry.paymentMethod || "Cash"
-        });
-        setShowModal(true);
-    };
-
-    return (
-        <main className="fixed inset-0 flex flex-col bg-[#F9FAFB] max-w-md mx-auto overflow-hidden animate-slide-in-right font-sans">
-            
-            {/* 1. BLUE HEADER */}
-            <header className="bg-[#1048A4] px-4 pb-12 pt-4 text-white">
-                <div className="flex items-center gap-3">
-                    <button onClick={() => navigate(-1)} className="flex h-10 w-10 shrink-0 items-center justify-center active:scale-95 transition">
-                        <ArrowLeft className="h-6 w-6" />
-                    </button>
-                    
-                    {/* 💡 Tapping the header area now opens the Edit Worker page! */}
-                    <div 
-                        onClick={() => workerData && navigate('/edit-worker', { state: { worker: workerData } })}
-                        className="flex min-w-0 flex-1 items-center gap-3 cursor-pointer group active:opacity-90 transition"
-                        title="Edit Worker Profile"
-                    >
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 text-lg font-bold shadow-sm">
-                            {workerName.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                            <p className="truncate text-[17px] font-semibold leading-tight group-hover:underline">{workerName} ✏️</p>
-                            <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-200 mt-0.5">
-                                {isActive ? "Active worker (Tap to edit)" : "Inactive worker (Tap to edit)"}
-                            </p>
-                        </div>
-                    </div>
-                    {/* Pencil Edit Button */}
-                    {isActive && (
-                      <button onClick={() => setIsEditMode(!isEditMode)} className={`flex h-10 w-10 items-center justify-center rounded-full transition active:scale-95 ${isEditMode ? "bg-white text-[#1048A4]" : "text-white bg-white/10"}`}>
-                          <Pencil className="h-4 w-4" />
-                      </button>
-                  )}
-                </div>
-            </header>
-
-          {/* 2. OVERLAPPING SUMMARY CARD (Fixed Balance Display) */}
-            <section className="-mt-10 px-4 relative z-10">
-                <div className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-xl">
-                    <div className="flex items-end justify-between">
-                        <div>
-                            <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-500">Advance this month</p>
-                            {/* Make the active period total the large red number */}
-                            <p className="mt-1 text-[26px] font-bold text-[#C0392B]">₹{formatMoney(periodTotal)}</p>
-                        </div>
-                        <div className="text-right border-l border-gray-200 pl-4">
-                            <p className="text-[9px] font-bold uppercase text-gray-400 mb-0.5">LIFETIME</p>
-                            {/* Show the lifetime total as the secondary metric */}
-                            <p className={`text-sm font-extrabold ${totalAdvance > 0 ? 'text-[#C0392B]' : 'text-gray-800'}`}>₹{formatMoney(totalAdvance)}</p>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* 3. FILTER BAR */}
-            <section className="flex items-center justify-between px-5 py-4 mt-2">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Transaction period</span>
-                <div className="flex h-9 items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 focus-within:border-[#1048A4] transition-colors">
-                    <select value={profilePeriod} onChange={(e) => setProfilePeriod(e.target.value)} className="appearance-none bg-transparent text-[13px] font-bold outline-none text-[#1048A4] cursor-pointer">
-                        {monthOptions.map(m => <option key={m}>{m}</option>)}
-                    </select>
-                    <ChevronDown className="h-3.5 w-3.5 text-[#1048A4] pointer-events-none" />
-                </div>
-            </section>
-
-            <div className="flex border-y border-gray-200 bg-gray-100 px-5 py-2">
-                <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">Entries</span>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Amount</span>
-            </div>
-
-            {/* 4. LEDGER LIST */}
-            <section className="flex-1 overflow-y-auto bg-white pb-28">
-                {isLoading ? (
-                    <p className="text-center text-gray-500 py-8 text-sm font-medium">Loading history...</p>
-                ) : visibleEntries.length > 0 ? (
-                    visibleEntries.map((entry) => (
-                        <div key={entry._id} className="border-b border-gray-100">
-                            <div className="flex items-start px-5 py-4">
-                                <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2">
-                                        <p className="text-[13px] font-bold text-gray-900">{dayjs(entry.date).format('DD MMM YY • hh:mm A')}</p>
-                                        {entry.isEdited && (
-                                            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[8px] font-extrabold text-amber-700">EDITED</span>
-                                        )}
-                                    </div>
-                                    <div className="mt-2 rounded-md bg-gray-50 border border-gray-200 p-2 mr-4 flex items-center justify-between gap-2">
-                                        <p className="text-[12px] text-gray-600 leading-snug font-medium wrap-break">
-                                            {entry.description || "Advance"}
-                                        </p>
-                                        <span className="shrink-0 rounded bg-white border border-gray-200 px-1.5 py-0.5 text-[9px] font-extrabold text-[#9D0052] uppercase">
-                                            {entry.paymentMethod || "Cash"}
-                                        </span>
-                                    </div>
-                                    {entry.isEdited && entry.editReason && (
-                                        <p className="mt-1.5 text-[10px] font-bold text-amber-700">Reason: {entry.editReason}</p>
-                                    )}
-                                </div>
-                                <div className="ml-3 flex items-start gap-2">
-                                    <div className="rounded bg-red-50 px-2.5 py-1.5 border border-red-100">
-                                        <p className="text-[15px] font-bold tabular-nums text-[#C0392B]">₹{formatMoney(entry.amount)}</p>
-                                    </div>
-                                    {isEditMode && (
-                                        <button onClick={() => openEditModal(entry)} className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white shadow-sm text-gray-500 active:scale-95 transition mt-0.5">
-                                            <Pencil className="h-3.5 w-3.5" />
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    ))
-                ) : (
-                    <div className="px-4 py-12 text-center">
-                        <p className="text-gray-400 text-sm font-semibold">No transactions for {profilePeriod}</p>
-                    </div>
-                )}
-            </section>
-
-            {/* 5. FLOATING BOTTOM BUTTON */}
-            {isActive && (
-              <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 z-20 animate-slide-up-bottom">
-                  <button 
-                      onClick={() => { 
-                          setEditId(null); 
-                          setFormData({ amount: '', notes: '', reason: '', paymentMethod: 'Cash' }); 
-                          setEntryDate(dayjs().format('YYYY-MM-DD'));
-                          setEntryTime(dayjs().format('HH:mm'));
-                          setShowModal(true);
-                      }}
-                      className="w-full bg-[#9D0052] text-white font-bold text-[15px] tracking-wide py-3.5 rounded-xl shadow-lg active:scale-[0.98] transition flex justify-center items-center gap-2"
-                  >
-                      <Plus className="w-5 h-5" /> LOG ADVANCE
-                  </button>
-              </div>
-          )}
-
-            {/* 6. UNIFIED ADD/EDIT MODAL (True Bottom Sheet) */}
-            {showModal && (
-                <div className="fixed inset-0 z-50 flex flex-col justify-end max-w-md mx-auto">
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-fade-in" onClick={() => setShowModal(false)} />
-                    
-                    <div className="relative bg-white rounded-t-2xl shadow-[0_-4px_24px_rgba(0,0,0,0.12)] flex flex-col animate-slide-up-bottom px-5 pt-4 pb-8">
-                        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4 shrink-0" />
-                        
-                        <div className="flex items-center justify-between mb-4 shrink-0">
-                            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
-                                {editId ? "Edit Advance" : "Log Advance"}
-                            </h2>
-                            <button onClick={() => setShowModal(false)} className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center transition hover:bg-gray-200">
-                                <X className="w-3.5 h-3.5 text-gray-500" />
-                            </button>
-                        </div>
-
-                        <div className="overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
-                            <form id="workerLedgerForm" onSubmit={handleSave}>
-                                
-                                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Amount (₹)</label>
-                                <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 mb-3 focus-within:border-[#9D0052] transition-colors bg-white">
-                                    <IndianRupee className="w-5 h-5 text-[#9D0052] shrink-0" />
-                                    <input type="number" required value={formData.amount} onChange={(e) => setFormData({...formData, amount: e.target.value})} placeholder="0" className="flex-1 text-2xl font-bold text-gray-900 outline-none placeholder-gray-300 bg-transparent w-full" />
-                                </div>
-
-                                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Payment Method</label>
-                                <div className="flex gap-2 mb-3">
-                                    {['Cash', 'Online', 'Check', 'Other'].map((method) => {
-                                        const isSelected = (formData.paymentMethod || 'Cash') === method;
-                                        return (
-                                            <button
-                                                key={method}
-                                                type="button"
-                                                onClick={() => setFormData({ ...formData, paymentMethod: method })}
-                                                className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-colors ${isSelected ? 'bg-[#9D0052] border-[#9D0052] text-white' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}
-                                            >
-                                                {method}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-
-                                <div className="flex gap-2 mb-3">
-                                    <div className="flex-1">
-                                        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Date</label>
-                                        <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 focus-within:border-[#9D0052] bg-white">
-                                            <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
-                                            <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className="flex-1 text-[13px] font-semibold text-gray-800 outline-none bg-transparent min-w-0" />
-                                        </div>
-                                    </div>
-                                    <div className="w-32">
-                                        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Time</label>
-                                        <div className="border border-gray-200 rounded-lg px-3 py-2.5 focus-within:border-[#9D0052] bg-white flex items-center gap-1">
-                                            <input type="time" value={entryTime} onChange={(e) => setEntryTime(e.target.value)} className="w-full text-[13px] font-semibold text-gray-800 outline-none bg-transparent" />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Description / Notes</label>
-                                <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-start gap-2 mb-5 focus-within:border-[#9D0052] bg-white">
-                                    <FileText className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
-                                    <textarea value={formData.notes} onChange={(e) => setFormData({...formData, notes: e.target.value})} rows={2} placeholder="Add details..." className="flex-1 text-sm text-gray-800 font-medium outline-none resize-none placeholder-gray-400 placeholder:font-normal bg-transparent" />
-                                </div>
-
-                                {editId && (
-                                    <div className="mb-4 relative">
-                                        <label className="block text-[11px] font-bold text-[#9D0052] uppercase tracking-widest mb-1">Reason for Edit *</label>
-                                        
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsReasonDropdownOpen(!isReasonDropdownOpen)}
-                                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 flex items-center justify-between bg-pink-50/20 focus:border-[#9D0052] text-sm font-semibold text-gray-900"
-                                        >
-                                            <span className={formData.reason ? "text-gray-900" : "text-gray-400"}>
-                                                {formData.reason || "Select reason..."}
-                                            </span>
-                                            <ChevronDown className={`w-4 h-4 text-[#9D0052] shrink-0 transition-transform ${isReasonDropdownOpen ? 'rotate-180' : ''}`} />
-                                        </button>
-
-                                        {isReasonDropdownOpen && (
-                                            <div className="absolute bottom-full left-0 mb-1.5 z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto py-1">
-                                                {EDIT_REASONS.map((r) => (
-                                                    <button
-                                                        key={r}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setFormData({ ...formData, reason: r });
-                                                            setIsReasonDropdownOpen(false);
-                                                        }}
-                                                        className={`block w-full text-left px-3.5 py-2.5 text-sm font-medium transition-colors ${
-                                                            formData.reason === r ? 'bg-pink-50 text-[#9D0052] font-bold' : 'text-gray-700 hover:bg-gray-50'
-                                                        }`}
-                                                    >
-                                                        {r}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </form>
-                        </div>
-
-                        <button type="submit" form="workerLedgerForm" disabled={isSaving} className="w-full bg-[#9D0052] text-white text-sm font-bold rounded-xl py-3.5 tracking-wider uppercase transition-all active:scale-[0.99] shrink-0 mt-1">
-                            {isSaving ? "SAVING..." : editId ? "SAVE CHANGES" : "SAVE ADVANCE"}
-                        </button>
-                    </div>
-                </div>
-            )}
-        </main>
-    );
-};
-
-export default WorkerLedger;
-</file>
-
-<file path="src/pages/Add-Worker.jsx">
-import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { api } from '../lib/api';
-import toast from 'react-hot-toast';
-import { decodeUpiFromQrImage } from '../lib/qrUtils';
-import { ArrowLeft, User, Phone, QrCode } from 'lucide-react';
-import { mutate } from 'swr';
-
-export default function AddWorker() {
-    const navigate = useNavigate();
-    const location = useLocation();
-    
-    // Page transition animation helper
-    const slideClass = location.state?.slideDirection === 'fade' ? 'animate-fade-in-fast' : 'animate-slide-in-right';
-
-    const [name, setName] = useState(location.state?.initialName || '');
-    const [phone, setPhone] = useState(location.state?.initialPhone || '');
-    const [upiHandle, setUpiHandle] = useState("@ybl");
-    const [scannedUpiId, setScannedUpiId] = useState("");
-    const [isSubmitting, setIsSubmitting] = useState(false);
-
-    // ─── Strict Validation Handlers ──────────────────────────────
-    const handleNameChange = (e) => {
-        // Only allow letters and spaces (strips numbers and special symbols)
-        const filtered = e.target.value.replace(/[^a-zA-Z\s]/g, '');
-        setName(filtered);
-    };
-
-    const handlePhoneChange = (e) => {
-        // Only allow numbers and limit strictly to 10 digits
-        const filtered = e.target.value.replace(/\D/g, '').slice(0, 10);
-        setPhone(filtered);
-    };
-
-    const handleQrUpload = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        try {
-            const extractedUpi = await decodeUpiFromQrImage(file);
-            setScannedUpiId(extractedUpi);
-            toast.success(`Verified QR! UPI ID: ${extractedUpi}`);
-        } catch (err) {
-            toast.error(err.message || "Could not read QR code. Try a clearer image.");
-        }
-    };
-
-    // ─── Submit Handler ──────────────────────────────────────────
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        
-        if (!name.trim()) {
-            toast.error("Please enter a valid worker name!");
-            return;
-        }
-        if (phone.length !== 10) {
-            toast.error("Phone number must be exactly 10 digits!");
-            return;
-        }
-
-        try {
-            setIsSubmitting(true);
-            
-            // 💡 Combine phone number + chosen handle suffix if phone is provided
-            const finalUpiId = scannedUpiId || (phone.length === 10 ? `${phone}${upiHandle}` : "");
-
-            const payload = {
-                name: name.trim(),
-                phoneNumber: phone,
-                upiId: finalUpiId, 
-                isActive: true
-            };
-
-            await api.post('/workers', payload);
-            mutate('/workers');
-            mutate('/workers?includeInactive=true');
-            toast.success("Worker added successfully! 🎉");
-            navigate('/cashbook', { replace: true, state: { slideDirection: 'fade' }});
-        } catch (error) {
-            console.error("Error adding worker:", error);
-            toast.error(error.response?.data?.message || "Failed to add worker.");
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    return (
-        <div className={`fixed inset-0 flex flex-col bg-gray-50 max-w-md mx-auto font-sans overflow-hidden ${slideClass}`}>
-            
-            {/* Top Blue App Bar */}
-            <header className="bg-[#1048A4] text-white px-4 py-4 flex items-center gap-4 shrink-0 shadow-md">
-                <button 
-                    onClick={() => navigate(-1)} 
-                    className="p-1 rounded-full active:scale-95 transition"
-                >
-                    <ArrowLeft className="w-6 h-6" />
-                </button>
-                <h1 className="text-[18px] font-semibold tracking-tight">Add Worker</h1>
-            </header>
-
-            {/* Form Content Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                <form id="addWorkerForm" onSubmit={handleSubmit} className="space-y-4">
-                    
-                    {/* Worker Name Input (Placeholder inside) */}
-                    <div className="bg-white border border-gray-300 rounded-xl px-3.5 py-3.5 flex items-center gap-3 focus-within:border-[#1048A4] transition-colors shadow-sm">
-                        <User className="w-5 h-5 text-gray-400 shrink-0" />
-                        <input 
-                            type="text"
-                            required
-                            placeholder="Worker name"
-                            value={name}
-                            onChange={handleNameChange}
-                            className="w-full text-base font-semibold text-gray-900 outline-none bg-transparent placeholder:text-gray-400 placeholder:font-normal"
-                        />
-                    </div>
-
-                    {/* Separated +91 and Mobile Number Row */}
-                    <div className="flex gap-2">
-                        {/* Unclickable Default +91 Tile */}
-                        <div className="bg-gray-50 border border-gray-300 rounded-xl px-3.5 py-3.5 flex items-center gap-2 shrink-0 select-none cursor-default">
-                            <span className="text-xl">🇮🇳</span>
-                            <span className="text-sm font-bold text-gray-700">+91</span>
-                        </div>
-
-                        {/* Mobile Number Input Tile */}
-                        <div className="flex-1 bg-white border border-gray-300 rounded-xl px-3.5 py-3.5 flex items-center gap-3 focus-within:border-[#1048A4] transition-colors shadow-sm">
-                            <input 
-                                type="tel"
-                                required
-                                placeholder="Mobile Number"
-                                value={phone}
-                                onChange={handlePhoneChange}
-                                className="w-full text-base font-semibold text-gray-900 outline-none bg-transparent placeholder:text-gray-400 placeholder:font-normal tracking-wide"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Upload QR Code Button */}
-                    <label className="mt-2.5 flex items-center justify-center gap-2 w-full bg-blue-50 border border-dashed border-[#1048A4] text-[#1048A4] text-xs font-bold py-2.5 rounded-xl cursor-pointer active:scale-98 transition">
-                        <QrCode className="w-4 h-4" />
-                        {scannedUpiId ? `QR Linked: ${scannedUpiId} (Tap to change)` : "Or Upload Worker's UPI QR Screenshot"}
-                        <input type="file" accept="image/*" onChange={handleQrUpload} className="hidden" />
-                    </label>
-
-                    {/* Optional UPI ID Builder Section */}
-                    <div className="pt-2">
-                        <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-1.5">
-                            Worker UPI ID <span className="normal-case tracking-normal font-normal text-gray-400">(Optional)</span>
-                        </label>
-                        <div className="flex gap-2 items-center">
-                            {/* Auto-populated preview box */}
-                            <div className="flex-1 bg-gray-50 border border-gray-300 rounded-xl px-3.5 py-3 text-sm font-bold text-gray-700 truncate select-none">
-                                {scannedUpiId ? scannedUpiId : (phone ? `${phone}${upiHandle}` : "Enter phone above...")}
-                            </div>
-                            
-                            {/* Bank / App Handle Suffix Selector */}
-                            <select 
-                                value={upiHandle} 
-                                onChange={(e) => setUpiHandle(e.target.value)}
-                                className="bg-white border border-gray-300 rounded-xl px-3 py-3 text-sm font-bold text-[#1048A4] outline-none cursor-pointer shrink-0 shadow-sm"
-                            >
-                                <option value="@ybl">@ybl (PhonePe)</option>
-                                <option value="@okaxis">@okaxis (GPay)</option>
-                                <option value="@okicici">@okicici (GPay)</option>
-                                <option value="@oksbi">@oksbi (GPay)</option>
-                                <option value="@paytm">@paytm (Paytm)</option>
-                                <option value="@ptaxis">@ptaxis (Paytm)</option>
-                            </select>
-                        </div>
-                    </div>
-
-                </form>
-            </div>
-
-            {/* Sticky Bottom Action Button */}
-            <div className="p-4 bg-white border-t border-gray-200 shrink-0">
-                <button 
-                    type="submit"
-                    form="addWorkerForm"
-                    disabled={isSubmitting || !name.trim() || phone.length !== 10}
-                    className="w-full bg-[#1048A4] hover:bg-[#0c367b] active:scale-[0.99] text-white font-bold text-[15px] py-3.5 rounded-xl shadow-lg transition-all uppercase tracking-wider disabled:opacity-50"
-                >
-                    {isSubmitting ? "Adding Worker..." : "Add Worker"}
-                </button>
-            </div>
-
-        </div>
-    );
 }
 </file>
 
@@ -3800,6 +3515,380 @@ export default function PickContact() {
 }
 </file>
 
+<file path="src/pages/WorkerLedger.jsx">
+import React, { useState, useMemo } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import useSWR, { mutate } from 'swr';
+import { api, fetcher } from '../lib/api';
+import dayjs from 'dayjs';
+import toast from 'react-hot-toast';
+import { ArrowLeft, Pencil, ChevronDown, Plus, X, Calendar, Clock3, IndianRupee, FileText } from 'lucide-react';
+import TransactionModal from '../components/TransactionModal';
+import { generateDynamicUpiQrDataUrl, shareQrImageToUpiApp } from '../lib/qrUtils';
+
+
+const WorkerLedger = () => {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const location = useLocation();
+    
+    // SWR Fetchers placed at the top
+    const { data: workerData } = useSWR(`/workers/${id}`, fetcher);
+    const { data: ledgerHistory = [], isLoading } = useSWR(`/ledger/worker/${id}`, fetcher);
+    
+    // Grab data safely after fetchers
+    const workerName = workerData?.name || location.state?.workerName || "Worker";
+    const isActive = workerData ? workerData.isActive !== false : location.state?.isActive !== false;
+
+    // UI States
+    const [profilePeriod, setProfilePeriod] = useState(dayjs().format('MMM YYYY'));
+    const [isEditMode, setIsEditMode] = useState(false);
+    
+    const [isUpiRedirecting, setIsUpiRedirecting] = useState(false);
+    const [isWaitingForUpi, setIsWaitingForUpi] = useState(false);
+    const [pendingUpiData, setPendingUpiData] = useState(null);
+
+    // Edit Modal States
+    const [showModal, setShowModal] = useState(false);
+    const [editId, setEditId] = useState(null);
+    const [formData, setFormData] = useState({ amount: '', notes: '', reason: '', paymentMethod: 'Cash' });
+    const [isSaving, setIsSaving] = useState(false);
+    const EDIT_REASONS = ["Amount correction", "Date correction", "Payment method correction" ,"Duplicate entry", "Other"];
+    const [isReasonDropdownOpen, setIsReasonDropdownOpen] = useState(false);
+    const [entryDate, setEntryDate] = useState(dayjs().format('YYYY-MM-DD'));
+    const [entryTime, setEntryTime] = useState(dayjs().format('HH:mm'));
+    // 🚨 BUG FIX 1: Ensure ledgerHistory is always treated as an array so .filter() doesn't crash
+    const safeHistory = Array.isArray(ledgerHistory) ? ledgerHistory : [];
+
+    // Filter math for the selected month
+    // 🚨 BUG FIX: Safe Filter Math for the selected month
+    const visibleEntries = safeHistory.filter(entry => {
+        // Fallback to createdAt if date is missing
+        const recordDate = entry.date || entry.createdAt; 
+        if (!recordDate) return false;
+        
+        // Convert the database date to match the "MMM YYYY" dropdown exactly
+        const entryMonthYear = dayjs(recordDate).format('MMM YYYY');
+        return entryMonthYear === profilePeriod;
+    });
+
+    const periodTotal = visibleEntries.reduce((sum, e) => sum + e.amount, 0);
+    const totalAdvance = safeHistory.reduce((sum, e) => sum + e.amount, 0);
+    // 🚨 BUG FIX 2: Use dayjs to generate the dropdown options so they match the filter perfectly
+    const monthOptions = useMemo(() => {
+        return Array.from({ length: 12 }).map((_, i) => 
+            dayjs().subtract(i, 'month').format('MMM YYYY')
+        );
+    }, []);
+
+    const formatMoney = (amount) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(amount);
+
+    // Unified Handle Save (Add & Edit)
+    const handleSave = async (e) => {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        if (!formData.amount) return toast.error("Amount required!");
+        if (editId && !formData.reason) return toast.error("Reason for Edit is required!");
+
+        const amountNum = Number(formData.amount);
+        const note = formData.notes || `Advance for ${workerName}`;
+
+        // If Online payment is selected and we aren't waiting for confirmation yet
+        if (formData.paymentMethod === 'Online' && !isWaitingForUpi && !isUpiRedirecting && !editId) {
+            const finalUpiId = workerData?.upiId || localStorage.getItem(`upi_${id}`) || (workerData?.phoneNumber ? `${workerData.phoneNumber}@ybl` : '');
+            
+            if (!finalUpiId) {
+                toast.error('Please add a phone number or UPI ID for this worker first!');
+                return;
+            }
+
+            setPendingUpiData({
+                entryType: "Advance",
+                workerId: id,
+                amount: amountNum,
+                paymentMethod: "Online",
+                description: formData.notes,
+                date: dayjs(`${entryDate}T${entryTime}`).toISOString(),
+                workerName: workerName,
+                upiId: finalUpiId
+            });
+
+            setShowModal(false);
+            setIsUpiRedirecting(true);
+
+            // Generate & share QR Code
+            try {
+                const { dataUrl } = await generateDynamicUpiQrDataUrl({
+                    upiId: finalUpiId,
+                    workerName,
+                    amount: amountNum,
+                    note
+                });
+                setPendingUpiData(prev => prev ? { ...prev, qrDataUrl: dataUrl } : prev);
+                await shareQrImageToUpiApp(dataUrl, workerName, amountNum);
+            } catch (err) {
+                console.error("QR Share error:", err);
+            }
+
+            setTimeout(() => {
+                setIsUpiRedirecting(false);
+                setIsWaitingForUpi(true);
+            }, 3500);
+            return;
+        }
+
+        try {
+            setIsSaving(true);
+            const payload = pendingUpiData ? {
+                entryType: pendingUpiData.entryType,
+                workerId: pendingUpiData.workerId,
+                amount: pendingUpiData.amount,
+                paymentMethod: pendingUpiData.paymentMethod,
+                description: pendingUpiData.description,
+                date: pendingUpiData.date
+            } : {
+                amount: amountNum,
+                paymentMethod: formData.paymentMethod || "Cash",
+                description: formData.notes,
+                date: dayjs(`${entryDate}T${entryTime}`).toISOString(),
+                entryType: "Advance",
+                workerId: id
+            };
+
+            if (editId) {
+                payload.isEdited = true;
+                payload.editReason = formData.reason;
+                await api.put(`/ledger/${editId}`, payload);
+                toast.success("Transaction updated!");
+            } else {
+                await api.post('/ledger', payload);
+                toast.success("Advance logged successfully! 🎉");
+            }
+
+            setShowModal(false);
+            setEditId(null);
+            setIsWaitingForUpi(false);
+            setPendingUpiData(null);
+            setFormData({ amount: '', notes: '', reason: '', paymentMethod: 'Cash' });
+            
+            mutate(`/ledger/worker/${id}`);
+            mutate('/ledger'); 
+        } catch (error) {
+            toast.error("Failed to save.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const openEditModal = (entry) => {
+
+        setEntryDate(dayjs(entry.date).format('YYYY-MM-DD'));
+        setEntryTime(dayjs(entry.date).format('HH:mm'));
+        setEditId(entry._id);
+        setFormData({ 
+            amount: entry.amount.toString(), 
+            notes: entry.description || "", 
+            reason: entry.editReason || "",
+            paymentMethod: entry.paymentMethod || "Cash"
+        });
+        setShowModal(true);
+    };
+
+    return (
+        <main className="fixed inset-0 flex flex-col bg-[#F9FAFB] max-w-md mx-auto overflow-hidden animate-slide-in-right font-sans">
+            
+            {/* 1. BLUE HEADER */}
+            <header className="bg-[#1048A4] px-4 pb-12 pt-4 text-white">
+                <div className="flex items-center gap-3">
+                    <button onClick={() => navigate(-1)} className="flex h-10 w-10 shrink-0 items-center justify-center active:scale-95 transition">
+                        <ArrowLeft className="h-6 w-6" />
+                    </button>
+                    
+                    {/* 💡 Tapping the header area now opens the Edit Worker page! */}
+                    <div 
+                        onClick={() => workerData && navigate('/edit-worker', { state: { worker: workerData } })}
+                        className="flex min-w-0 flex-1 items-center gap-3 cursor-pointer group active:opacity-90 transition"
+                        title="Edit Worker Profile"
+                    >
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 text-lg font-bold shadow-sm">
+                            {workerName.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                            <p className="truncate text-[17px] font-semibold leading-tight group-hover:underline">{workerName} ✏️</p>
+                            <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-200 mt-0.5">
+                                {isActive ? "Active worker (Tap to edit)" : "Inactive worker (Tap to edit)"}
+                            </p>
+                        </div>
+                    </div>
+                    {/* Pencil Edit Button */}
+                    {isActive && (
+                      <button onClick={() => setIsEditMode(!isEditMode)} className={`flex h-10 w-10 items-center justify-center rounded-full transition active:scale-95 ${isEditMode ? "bg-white text-[#1048A4]" : "text-white bg-white/10"}`}>
+                          <Pencil className="h-4 w-4" />
+                      </button>
+                  )}
+                </div>
+            </header>
+
+                            {/* 2. OVERLAPPING SUMMARY CARD (Fixed Balance Display) */}
+                                <section className="-mt-10 px-4 relative z-10">
+                                    <div className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-xl">
+                                        <div className="flex items-end justify-between">
+                                            <div>
+                                                <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-500">Advance this month</p>
+                                                {/* Make the active period total the large red number */}
+                                                <p className="mt-1 text-[26px] font-bold text-[#C0392B]">₹{formatMoney(periodTotal)}</p>
+                                            </div>
+                                            <div className="text-right border-l border-gray-200 pl-4">
+                                                <p className="text-[9px] font-bold uppercase text-gray-400 mb-0.5">LIFETIME</p>
+                                                {/* Show the lifetime total as the secondary metric */}
+                                                <p className={`text-sm font-extrabold ${totalAdvance > 0 ? 'text-[#C0392B]' : 'text-gray-800'}`}>₹{formatMoney(totalAdvance)}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                        {/* 3. FILTER BAR */}
+                                        <section className="flex items-center justify-between px-5 py-4 mt-2">
+                                            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Transaction period</span>
+                                            <div className="flex h-9 items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 focus-within:border-[#1048A4] transition-colors">
+                                                <select value={profilePeriod} onChange={(e) => setProfilePeriod(e.target.value)} className="appearance-none bg-transparent text-[13px] font-bold outline-none text-[#1048A4] cursor-pointer">
+                                                    {monthOptions.map(m => <option key={m}>{m}</option>)}
+                                                </select>
+                                                <ChevronDown className="h-3.5 w-3.5 text-[#1048A4] pointer-events-none" />
+                                            </div>
+                                        </section>
+
+                                        <div className="flex border-y border-gray-200 bg-gray-100 px-5 py-2">
+                                            <span className="flex-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">Entries</span>
+                                            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Amount</span>
+                                        </div>
+
+                                        `{/* 4. LEDGER LIST */}
+                                        <section className="flex-1 overflow-y-auto bg-white pb-28">
+                                            {isLoading ? (
+                                                <p className="text-center text-gray-500 py-8 text-sm font-medium">Loading history...</p>
+                                            ) : visibleEntries.length > 0 ? (
+                                                visibleEntries.map((entry) => (
+                                                    <div key={entry._id} className="border-b border-gray-100">
+                                                        <div className="flex items-start px-5 py-4">
+                                                            <div className="min-w-0 flex-1">
+                                                                <div className="flex items-center gap-2">
+                                                                    <p className="text-[13px] font-bold text-gray-900">{dayjs(entry.date).format('DD MMM YY • hh:mm A')}</p>
+                                                                    {entry.isEdited && (
+                                                                        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[8px] font-extrabold text-amber-700">EDITED</span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="mt-2 rounded-md bg-gray-50 border border-gray-200 p-2 mr-4 flex items-center justify-between gap-2">
+                                                                    <p className="text-[12px] text-gray-600 leading-snug font-medium wrap-break">
+                                                                        {entry.description || "Advance"}
+                                                                    </p>
+                                                                    <span className="shrink-0 rounded bg-white border border-gray-200 px-1.5 py-0.5 text-[9px] font-extrabold text-[#9D0052] uppercase">
+                                                                        {entry.paymentMethod || "Cash"}
+                                                                    </span>
+                                                                </div>
+                                                                {entry.isEdited && entry.editReason && (
+                                                                    <p className="mt-1.5 text-[10px] font-bold text-amber-700">Reason: {entry.editReason}</p>
+                                                                )}
+                                                            </div>
+                                                            <div className="ml-3 flex items-start gap-2">
+                                                                <div className="rounded bg-red-50 px-2.5 py-1.5 border border-red-100">
+                                                                    <p className="text-[15px] font-bold tabular-nums text-[#C0392B]">₹{formatMoney(entry.amount)}</p>
+                                                                </div>
+                                                                {isEditMode && (
+                                                                    <button onClick={() => openEditModal(entry)} className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white shadow-sm text-gray-500 active:scale-95 transition mt-0.5">
+                                                                        <Pencil className="h-3.5 w-3.5" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div className="px-4 py-12 text-center">
+                                                    <p className="text-gray-400 text-sm font-semibold">No transactions for {profilePeriod}</p>
+                                                </div>
+                                            )}
+                                        </section>`
+
+                                    {/* 5. FLOATING BOTTOM BUTTON */}
+                                    {isActive && (
+                                    <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 z-20 animate-slide-up-bottom">
+                                        <button 
+                                            onClick={() => { 
+                                                setEditId(null); 
+                                                setFormData({ amount: '', notes: '', reason: '', paymentMethod: 'Cash' }); 
+                                                setEntryDate(dayjs().format('YYYY-MM-DD'));
+                                                setEntryTime(dayjs().format('HH:mm'));
+                                                setShowModal(true);
+                                            }}
+                                            className="w-full bg-[#9D0052] text-white font-bold text-[15px] tracking-wide py-3.5 rounded-xl shadow-lg active:scale-[0.98] transition flex justify-center items-center gap-2"
+                                        >
+                                            <Plus className="w-5 h-5" /> LOG ADVANCE
+                                        </button>
+                                    </div>
+                                )}``
+
+           
+                        {/* 6. UNIFIED ADD/EDIT MODAL (True Bottom Sheet) */}
+                       <TransactionModal
+                            isOpen={showModal || isWaitingForUpi}
+                            onClose={() => { setShowModal(false); setIsWaitingForUpi(false); setPendingUpiData(null); }}
+                            onSubmit={handleSave}
+                            type="Advance"
+                            editId={editId}
+                            formData={{
+                                amount: formData.amount,
+                                paymentMethod: formData.paymentMethod,
+                                selectedWorkerId: id,
+                                entryDate: entryDate,
+                                entryTime: entryTime,
+                                transactionId: "",
+                                notes: formData.notes,
+                                reason: formData.reason
+                            }}
+                            setFormData={(updated) => {
+                                setFormData(prev => ({
+                                    ...prev,
+                                    ...(updated.amount !== undefined ? { amount: updated.amount } : {}),
+                                    ...(updated.paymentMethod !== undefined ? { paymentMethod: updated.paymentMethod } : {}),
+                                    ...(updated.notes !== undefined ? { notes: updated.notes } : {}),
+                                    ...(updated.reason !== undefined ? { reason: updated.reason } : {})
+                                }));
+                                if (updated.entryDate !== undefined) setEntryDate(updated.entryDate);
+                                if (updated.entryTime !== undefined) setEntryTime(updated.entryTime);
+                            }}
+                            workers={[]}
+                            isWorkerDropdownOpen={false}
+                            setIsWorkerDropdownOpen={() => {}}
+                            isReasonDropdownOpen={isReasonDropdownOpen}
+                            setIsReasonDropdownOpen={setIsReasonDropdownOpen}
+                            EDIT_REASONS={EDIT_REASONS}
+                            isSubmitting={isSaving}
+                            isWaitingForUpi={isWaitingForUpi}
+                            pendingUpiData={pendingUpiData}
+                            onCancelUpi={() => { setIsWaitingForUpi(false); setPendingUpiData(null); }}
+                        />
+
+                        {/* 🔒 3.5-SECOND LOCK SCREEN OVERLAY */}
+                        {isUpiRedirecting && (
+                            <div className="fixed inset-0 bg-black/60 z-[9999] flex flex-col items-center justify-center p-6 backdrop-blur-md select-none touch-none">
+                                <div className="bg-white rounded-2xl p-6 max-w-xs w-full text-center shadow-2xl space-y-3 animate-pop-in">
+                                    <div className="w-10 h-10 border-4 border-[#1048A4] border-t-transparent rounded-full animate-spin mx-auto" />
+                                    <h3 className="text-sm font-extrabold text-gray-900 uppercase tracking-wide">
+                                        Opening UPI App...
+                                    </h3>
+                                    <p className="text-xs font-medium text-gray-500 leading-relaxed">
+                                        Please complete the payment of <span className="font-bold text-gray-800">₹{pendingUpiData?.amount}</span> to <span className="font-bold text-[#1048A4]">{pendingUpiData?.workerName}</span>. Do not close or navigate away.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+        </main>
+    );
+};
+
+export default WorkerLedger;
+</file>
+
 <file path="src/App.jsx">
 import { BrowserRouter,Routes,Route } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
@@ -3866,6 +3955,198 @@ export default function App() {
 }
 </file>
 
+<file path="src/pages/Add-Worker.jsx">
+import React, { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { api } from '../lib/api';
+import toast from 'react-hot-toast';
+import { decodeUpiFromQrImage } from '../lib/qrUtils';
+import { ArrowLeft, User, Phone, QrCode } from 'lucide-react';
+import { mutate } from 'swr';
+
+export default function AddWorker() {
+    const navigate = useNavigate();
+    const location = useLocation();
+    
+    // Page transition animation helper
+    const slideClass = location.state?.slideDirection === 'fade' ? 'animate-fade-in-fast' : 'animate-slide-in-right';
+
+    const [name, setName] = useState(location.state?.initialName || '');
+    const [phone, setPhone] = useState(location.state?.initialPhone || '');
+    const [upiHandle, setUpiHandle] = useState("@ybl");
+    const [scannedUpiId, setScannedUpiId] = useState("");
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // ─── Strict Validation Handlers ──────────────────────────────
+    const handleNameChange = (e) => {
+        // Only allow letters and spaces (strips numbers and special symbols)
+        const filtered = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+        setName(filtered);
+    };
+
+    const handlePhoneChange = (e) => {
+        // Only allow numbers and limit strictly to 10 digits
+        const filtered = e.target.value.replace(/\D/g, '').slice(0, 10);
+        setPhone(filtered);
+    };
+
+    const handleQrUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            const extractedUpi = await decodeUpiFromQrImage(file);
+            setScannedUpiId(extractedUpi);
+            toast.success(`Verified QR! UPI ID: ${extractedUpi}`);
+        } catch (err) {
+            toast.error(err.message || "Could not read QR code. Try a clearer image.");
+        }
+    };
+
+    // ─── Submit Handler ──────────────────────────────────────────
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        
+        if (!name.trim()) {
+            toast.error("Please enter a valid worker name!");
+            return;
+        }
+        if (phone.length !== 10) {
+            toast.error("Phone number must be exactly 10 digits!");
+            return;
+        }
+
+        try {
+            setIsSubmitting(true);
+            
+            // 💡 Combine phone number + chosen handle suffix if phone is provided
+            const finalUpiId = scannedUpiId || (phone.length === 10 ? `${phone}${upiHandle}` : "");
+
+            const payload = {
+                name: name.trim(),
+                phoneNumber: phone,
+                upiId: finalUpiId, 
+                isActive: true
+            };
+
+            await api.post('/workers', payload);
+            mutate('/workers');
+            mutate('/workers?includeInactive=true');
+            toast.success("Worker added successfully! 🎉");
+            navigate('/cashbook', { replace: true, state: { slideDirection: 'fade' }});
+        } catch (error) {
+            console.error("Error adding worker:", error);
+            toast.error(error.response?.data?.message || "Failed to add worker.");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <div className={`fixed inset-0 flex flex-col bg-gray-50 max-w-md mx-auto font-sans overflow-hidden ${slideClass}`}>
+            
+            {/* Top Blue App Bar */}
+            <header className="bg-[#1048A4] text-white px-4 py-4 flex items-center gap-4 shrink-0 shadow-md">
+                <button 
+                    onClick={() => navigate(-1)} 
+                    className="p-1 rounded-full active:scale-95 transition"
+                >
+                    <ArrowLeft className="w-6 h-6" />
+                </button>
+                <h1 className="text-[18px] font-semibold tracking-tight">Add Worker</h1>
+            </header>
+
+            {/* Form Content Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <form id="addWorkerForm" onSubmit={handleSubmit} className="space-y-4">
+                    
+                    {/* Worker Name Input (Placeholder inside) */}
+                    <div className="bg-white border border-gray-300 rounded-xl px-3.5 py-3.5 flex items-center gap-3 focus-within:border-[#1048A4] transition-colors shadow-sm">
+                        <User className="w-5 h-5 text-gray-400 shrink-0" />
+                        <input 
+                            type="text"
+                            required
+                            placeholder="Worker name"
+                            value={name}
+                            onChange={handleNameChange}
+                            className="w-full text-base font-semibold text-gray-900 outline-none bg-transparent placeholder:text-gray-400 placeholder:font-normal"
+                        />
+                    </div>
+
+                    {/* Separated +91 and Mobile Number Row */}
+                    <div className="flex gap-2">
+                        {/* Unclickable Default +91 Tile */}
+                        <div className="bg-gray-50 border border-gray-300 rounded-xl px-3.5 py-3.5 flex items-center gap-2 shrink-0 select-none cursor-default">
+                            <span className="text-xl">🇮🇳</span>
+                            <span className="text-sm font-bold text-gray-700">+91</span>
+                        </div>
+
+                        {/* Mobile Number Input Tile */}
+                        <div className="flex-1 bg-white border border-gray-300 rounded-xl px-3.5 py-3.5 flex items-center gap-3 focus-within:border-[#1048A4] transition-colors shadow-sm">
+                            <input 
+                                type="tel"
+                                required
+                                placeholder="Mobile Number"
+                                value={phone}
+                                onChange={handlePhoneChange}
+                                className="w-full text-base font-semibold text-gray-900 outline-none bg-transparent placeholder:text-gray-400 placeholder:font-normal tracking-wide"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Upload QR Code Button */}
+                    <label className="mt-2.5 flex items-center justify-center gap-2 w-full bg-blue-50 border border-dashed border-[#1048A4] text-[#1048A4] text-xs font-bold py-2.5 rounded-xl cursor-pointer active:scale-98 transition">
+                        <QrCode className="w-4 h-4" />
+                        {scannedUpiId ? `QR Linked: ${scannedUpiId} (Tap to change)` : "Or Upload Worker's UPI QR Screenshot"}
+                        <input type="file" accept="image/*" onChange={handleQrUpload} className="hidden" />
+                    </label>
+
+                    {/* Optional UPI ID Builder Section */}
+                    <div className="pt-2">
+                        <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-1.5">
+                            Worker UPI ID <span className="normal-case tracking-normal font-normal text-gray-400">(Optional)</span>
+                        </label>
+                        <div className="flex gap-2 items-center">
+                            {/* Auto-populated preview box */}
+                            <div className="flex-1 bg-gray-50 border border-gray-300 rounded-xl px-3.5 py-3 text-sm font-bold text-gray-700 truncate select-none">
+                                {scannedUpiId ? scannedUpiId : (phone ? `${phone}${upiHandle}` : "Enter phone above...")}
+                            </div>
+                            
+                            {/* Bank / App Handle Suffix Selector */}
+                            <select 
+                                value={upiHandle} 
+                                onChange={(e) => setUpiHandle(e.target.value)}
+                                className="bg-white border border-gray-300 rounded-xl px-3 py-3 text-sm font-bold text-[#1048A4] outline-none cursor-pointer shrink-0 shadow-sm"
+                            >
+                                <option value="@ybl">@ybl (PhonePe)</option>
+                                <option value="@okaxis">@okaxis (GPay)</option>
+                                <option value="@okicici">@okicici (GPay)</option>
+                                <option value="@oksbi">@oksbi (GPay)</option>
+                                <option value="@paytm">@paytm (Paytm)</option>
+                                <option value="@ptaxis">@ptaxis (Paytm)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                </form>
+            </div>
+
+            {/* Sticky Bottom Action Button */}
+            <div className="p-4 bg-white border-t border-gray-200 shrink-0">
+                <button 
+                    type="submit"
+                    form="addWorkerForm"
+                    disabled={isSubmitting || !name.trim() || phone.length !== 10}
+                    className="w-full bg-[#1048A4] hover:bg-[#0c367b] active:scale-[0.99] text-white font-bold text-[15px] py-3.5 rounded-xl shadow-lg transition-all uppercase tracking-wider disabled:opacity-50"
+                >
+                    {isSubmitting ? "Adding Worker..." : "Add Worker"}
+                </button>
+            </div>
+
+        </div>
+    );
+}
+</file>
+
 <file path="src/pages/CashbookPage.jsx">
 import React , {  useState, useMemo } from 'react'
 import { Search, FileText, User, UserPlus, ChevronDown, Plus, Pencil, X, Calendar, FileSpreadsheet, FileDown, Box, Clock3, NotebookText, IndianRupee, Hash } from 'lucide-react';
@@ -3879,6 +4160,8 @@ import useSWR, { mutate } from 'swr';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { generateDynamicUpiQrDataUrl, shareQrImageToUpiApp } from '../lib/qrUtils';
+import TransactionModal from '../components/TransactionModal';
+
 
 // used to show the "Time ago" in the worker advance list
 dayjs.extend(relativeTime);
@@ -4082,7 +4365,7 @@ const CashbookPage = () => {
     };
 
 
-        const triggerUpiPayment = async (amount, note) => {
+       const triggerUpiPayment = async (amount, note, workerUpiId, workerName) => {
             try {
                 // 1. Generate crisp QR image with the exact amount baked in
                 const { dataUrl } = await generateDynamicUpiQrDataUrl({
@@ -4620,184 +4903,46 @@ return (
                                 )}
 
             
-            {/* 🌟 UNIFIED UNIVERSAL BOTTOM SHEET (Advances & Deposits) */}
-            {(showWorkerModal || showBossModal) && (
-                <div className="fixed inset-0 z-50 flex flex-col justify-end max-w-md mx-auto ">
-                    <div className="absolute inset-0 bg-black/40 animate-fade-in" onClick={() => { setShowWorkerModal(false); setShowBossModal(false); setBossEditId(null); setIsWorkerDropdownOpen(false); setSelectedWorkerId(""); }} />
-                    <div className="relative bg-white rounded-t-2xl px-5 pt-4 pb-8 animate-slide-up-bottom" style={{ boxShadow: "0 -4px 24px rgba(0,0,0,0.12)" }}>
-                        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4 shrink-0" />
-                        
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
-                                {showWorkerModal ? "Log Advance" : bossEditId ? "Edit Deposit" : "Log Deposit"}
-                            </h2>
-                            <button onClick={() => { setShowWorkerModal(false); setShowBossModal(false); setBossEditId(null); setIsWorkerDropdownOpen(false); setSelectedWorkerId(""); }} className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center">
-                                <X className="w-3.5 h-3.5 text-gray-500" />
-                            </button>
-                        </div>
-
-                        <div className="overflow-y-auto max-h-[75vh]" style={{ scrollbarWidth: 'none' }}>
-                            <form id="unifiedForm" onSubmit={showWorkerModal ? handleSubmitAdvance : handleBossSubmit}>
-                                
-                                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Amount (₹)</label>
-                                <div className={`border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 mb-3 bg-white ${showWorkerModal ? 'focus-within:border-[#9D0052]' : 'focus-within:border-[#0E793C]'}`}>
-                                    <IndianRupee className={`w-5 h-5 shrink-0 ${showWorkerModal ? 'text-[#9D0052]' : 'text-[#0E793C]'}`} />
-                                    <input type="number" required value={showWorkerModal ? advanceAmount : bossFormData.amount} onChange={(e) => showWorkerModal ? setAdvanceAmount(e.target.value) : setBossFormData({...bossFormData, amount: e.target.value})} placeholder="0" className="flex-1 text-2xl font-extrabold text-gray-900 outline-none placeholder-gray-300 bg-transparent w-full" />
-                                </div>
-
-                                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Payment Method</label>
-                                <div className="flex gap-2 mb-3">
-                                    {['Cash', 'Online', 'Check', 'Other'].map((method) => {
-                                        const isSelected = showWorkerModal ? advancePaymentMethod === method : bossFormData.paymentMethod === method;
-                                        const activeBg = showWorkerModal ? 'bg-[#9D0052] border-[#9D0052]' : 'bg-[#0E793C] border-[#0E793C]';
-                                        
-                                        return (
-                                            <button
-                                                key={method}
-                                                type="button"
-                                                onClick={() => showWorkerModal ? setAdvancePaymentMethod(method) : setBossFormData({...bossFormData, paymentMethod: method})}
-                                                className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-colors ${isSelected ? `${activeBg} text-white` : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}
-                                            >
-                                                {method}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-
-                            
-                                    {showWorkerModal && (
-                                    <div className="mb-3 relative">
-                                        <label className="block text-[11px] font-semibold text-gray-400 uppercase mb-1">
-                                        Worker
-                                        </label>
-
-                                        <button
-                                        type="button"
-                                        onClick={() => setIsWorkerDropdownOpen(!isWorkerDropdownOpen)}
-                                        className="w-full border border-gray-200 rounded-lg p-3 flex justify-between text-sm"
-                                        >
-                                        {workers.find(w => (w._id || w.id) === selectedWorkerId)?.name || "-- Select Active Worker --"}
-                                        <ChevronDown size={16} className="text-[#9D0052]" />
-                                        </button>
-
-                                        {isWorkerDropdownOpen && (
-                                        <div className="absolute z-50 w-full bg-white border rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                                            {workers.filter(w => w.isActive !== false).map(w => (
-                                            <button
-                                                key={w._id || w.id}
-                                                type="button"
-                                                onClick={() => {
-                                                setSelectedWorkerId(w._id || w.id);
-                                                setIsWorkerDropdownOpen(false);
-                                                }}
-                                                className="block w-full text-left p-2.5 text-sm hover:bg-pink-50"
-                                            >
-                                                {w.name}
-                                            </button>
-                                            ))}
-                                        </div>
-                                        )}
-                                    </div>
-                                    )}
-
-
-                                <div className="flex gap-2 mb-3">
-                                    <div className="flex-1">
-                                        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Date</label>
-                                        <div className={`border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 bg-white ${showWorkerModal ? 'focus-within:border-[#9D0052]' : 'focus-within:border-[#0E793C]'}`}>
-                                            <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
-                                            <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className="flex-1 text-sm font-semibold text-gray-800 outline-none bg-transparent min-w-0" />
-                                        </div>
-                                    </div>
-                                    <div className="w-32">
-                                        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Time</label>
-                                        <div className={`border border-gray-200 rounded-lg px-3 py-2.5 bg-white flex items-center ${showWorkerModal ? 'focus-within:border-[#9D0052]' : 'focus-within:border-[#0E793C]'}`}>
-                                            <input type="time" value={entryTime} onChange={(e) => setEntryTime(e.target.value)} className="w-full text-sm font-semibold text-gray-800 outline-none bg-transparent" />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {!showWorkerModal && (
-                                    <>
-                                        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Transaction ID <span className="normal-case tracking-normal font-medium">(Optional)</span></label>
-                                        <div className="border border-gray-200 rounded-lg px-3 py-2.5 flex items-center gap-2 mb-3 bg-white focus-within:border-[#0E793C]">
-                                            <Hash className="w-4 h-4 text-gray-400 shrink-0" />
-                                            <input type="text" value={bossFormData.transactionId} onChange={(e) => setBossFormData({...bossFormData, transactionId: e.target.value})} placeholder="Bank or UPI reference" className="flex-1 text-sm font-semibold text-gray-800 outline-none placeholder-gray-400 bg-transparent w-full" />
-                                        </div>
-                                    </>
-                                )}
-
-                                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Description / Notes</label>
-                                <div className={`border border-gray-200 rounded-lg px-3 py-2.5 flex items-start gap-2 mb-5 bg-white ${showWorkerModal ? 'focus-within:border-[#9D0052]' : 'focus-within:border-[#0E793C]'}`}>
-                                    <FileText className={`w-4 h-4 shrink-0 mt-0.5 ${showWorkerModal ? 'text-[#9D0052]' : 'text-[#0E793C]'}`} />
-                                    <textarea value={showWorkerModal ? advanceNotes : bossFormData.notes} onChange={(e) => showWorkerModal ? setAdvanceNotes(e.target.value) : setBossFormData({...bossFormData, notes: e.target.value})} rows={2} placeholder="Add details..." className="flex-1 text-sm text-gray-800 outline-none resize-none placeholder-gray-400 bg-transparent" />
-                                </div>
-
-                               {bossEditId && !showWorkerModal && (
-                                    <div className="mb-5 relative">
-                                        <label className="block text-[11px] font-bold text-[#0E793C] uppercase tracking-widest mb-1">Reason for Edit *</label>
-                                        
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsReasonDropdownOpen(!isReasonDropdownOpen)}
-                                            className="w-full border-2 border-[#0E793C]/20 rounded-lg px-3 py-2.5 flex items-center justify-between bg-green-50/30 focus:border-[#0E793C] text-sm font-semibold text-gray-900"
-                                        >
-                                            <span className={bossFormData.reason ? "text-gray-900" : "text-gray-400"}>
-                                                {bossFormData.reason || "Select a reason..."}
-                                            </span>
-                                            <ChevronDown className={`w-4 h-4 text-[#0E793C] shrink-0 transition-transform ${isReasonDropdownOpen ? 'rotate-180' : ''}`} />
-                                        </button>
-
-                                        {isReasonDropdownOpen && (
-                                            <div className="absolute bottom-full left-0 mb-1.5 z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto py-1">
-                                                {EDIT_REASONS.map((r) => (
-                                                    <button
-                                                        key={r}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setBossFormData({ ...bossFormData, reason: r });
-                                                            setIsReasonDropdownOpen(false);
-                                                        }}
-                                                        className={`block w-full text-left px-3.5 py-2.5 text-sm font-medium transition-colors ${
-                                                            bossFormData.reason === r ? 'bg-green-50 text-[#0E793C] font-bold' : 'text-gray-700 hover:bg-gray-50'
-                                                        }`}
-                                                    >
-                                                        {r}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                                </form>
-                        </div>
-
-                    
-                                <button 
-                                    type="submit" 
-                                    form="unifiedForm" 
-                                    disabled={isSubmittingPayment} 
-                                    className={`w-full text-white text-sm font-bold rounded-xl py-3.5 tracking-wider uppercase transition-all active:scale-[0.99] disabled:opacity-70 ${
-                                        showWorkerModal && advancePaymentMethod === 'Online' 
-                                            ? 'bg-[#1A73E8] hover:bg-[#1557B0]' 
-                                            : showWorkerModal 
-                                                ? 'bg-[#9D0052] hover:bg-[#800043]' 
-                                                : 'bg-[#0E793C] hover:bg-[#0A5C2D]'
-                                    }`}
-                                >
-                                    {isSubmittingPayment 
-                                        ? "SAVING..." 
-                                        : bossEditId 
-                                            ? "SAVE CHANGES" 
-                                            : showWorkerModal && advancePaymentMethod === 'Online' 
-                                                ? `PAY ₹${advanceAmount || 0} ON GPAY` 
-                                                : showWorkerModal 
-                                                    ? "SAVE ADVANCE" 
-                                                    : "SAVE DEPOSIT"}
-                                </button>
-                    </div>
-                </div>
-            )}
+                                    {/* 🌟 UNIFIED UNIVERSAL BOTTOM SHEET (Advances & Deposits) */}
+                                    <TransactionModal
+                                        isOpen={showWorkerModal || showBossModal}
+                                        onClose={() => { setShowWorkerModal(false); setShowBossModal(false); setBossEditId(null); setIsWorkerDropdownOpen(false); setSelectedWorkerId(""); }}
+                                        onSubmit={showWorkerModal ? handleSubmitAdvance : handleBossSubmit}
+                                        type={showWorkerModal ? "Advance" : "BossDeposit"}
+                                        editId={bossEditId}
+                                        formData={{
+                                            amount: showWorkerModal ? advanceAmount : bossFormData.amount,
+                                            paymentMethod: showWorkerModal ? advancePaymentMethod : bossFormData.paymentMethod,
+                                            selectedWorkerId: selectedWorkerId,
+                                            entryDate: entryDate,
+                                            entryTime: entryTime,
+                                            transactionId: bossFormData.transactionId,
+                                            notes: showWorkerModal ? advanceNotes : bossFormData.notes,
+                                            reason: bossFormData.reason
+                                        }}
+                                        setFormData={(updated) => {
+                                            if (showWorkerModal) {
+                                                if (updated.amount !== undefined) setAdvanceAmount(updated.amount);
+                                                if (updated.paymentMethod !== undefined) setAdvancePaymentMethod(updated.paymentMethod);
+                                                if (updated.selectedWorkerId !== undefined) setSelectedWorkerId(updated.selectedWorkerId);
+                                                if (updated.entryDate !== undefined) setEntryDate(updated.entryDate);
+                                                if (updated.entryTime !== undefined) setEntryTime(updated.entryTime);
+                                                if (updated.notes !== undefined) setAdvanceNotes(updated.notes);
+                                            } else {
+                                                setBossFormData(prev => ({ ...prev, ...updated }));
+                                            }
+                                        }}
+                                        workers={workers}
+                                        isWorkerDropdownOpen={isWorkerDropdownOpen}
+                                        setIsWorkerDropdownOpen={setIsWorkerDropdownOpen}
+                                        isReasonDropdownOpen={isReasonDropdownOpen}
+                                        setIsReasonDropdownOpen={setIsReasonDropdownOpen}
+                                        EDIT_REASONS={EDIT_REASONS}
+                                        isSubmitting={isSubmittingPayment}
+                                        isWaitingForUpi={isWaitingForUpi}
+                                        pendingUpiData={pendingUpiData}
+                                        onCancelUpi={() => { setIsWaitingForUpi(false); setPendingUpiData(null); setShowWorkerModal(false); }}
+                                    />
             
             {/* 6. EXPORT LEDGER MODAL (Centered Pop-in) */}
             {showExportModal && (

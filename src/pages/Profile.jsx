@@ -1,15 +1,13 @@
-import React from 'react'
-import { useEffect } from 'react';
-import { ArrowLeft, User, Mail, Phone, Edit3, LogOut, Check, X } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { ArrowLeft, User, Mail, Phone, Edit3, LogOut, X, Link as LinkIcon } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
-import toast, {Toaster} from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
 import BottomNav from '../components/BottomNav';
 import { auth } from '../firebase';
-import { signOut } from 'firebase/auth';
+import { signOut, GoogleAuthProvider, linkWithPopup } from 'firebase/auth';
 import { mutate } from 'swr';
-
 
 export const Profile = () => {
     const navigate = useNavigate();
@@ -18,17 +16,16 @@ export const Profile = () => {
 
     const [user, setUser] = useState({
         name: '',
-        email:'',
-        phoneNumber:''
+        email: '',
+        phoneNumber: ''
     });
 
     const [loading, setLodaing] = useState(true);
-
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editName, setEditName] = useState('');
     const [editPhone, setEditPhone] = useState('');
     const [isSaving, setIsSaving] = useState(false);
-
+    const [isLinking, setIsLinking] = useState(false);
 
     // 1. Fetch User Profile from MongoDB on load
     useEffect(() => {
@@ -42,7 +39,7 @@ export const Profile = () => {
             } catch (error) {
                 console.error("Failed to fetch user profile:", error);
                 toast.error("Failed to load profile data.");
-            }finally{
+            } finally {
                 setLodaing(false);
             }
         };
@@ -65,12 +62,48 @@ export const Profile = () => {
        } catch (error) {
         console.error("Failed to update profile:", error);
         toast.error("Failed to update profile.");
-       }finally{
+       } finally {
         setIsSaving(false);
        }
     };
 
-    // 3. Handle Logout
+    // 🌟 3. LINK GOOGLE ACCOUNT TO CURRENT PHONE ACCOUNT
+   const handleLinkGoogle = async () => {
+        try {
+            setIsLinking(true);
+            const provider = new GoogleAuthProvider();
+            const currentUser = auth.currentUser;
+
+            if (!currentUser) {
+                toast.error("No active session found.");
+                return;
+            }
+
+            await linkWithPopup(currentUser, provider);
+            
+            // 💡 FORCE Firebase to generate a brand new token containing the linked Google email
+            const token = await currentUser.getIdToken(true);
+            localStorage.setItem("authToken", token);
+            
+            // Sync with backend so MongoDB updates the email field
+            const response = await api.get('/users/profile');
+            setUser(response.data);
+
+            toast.success("Google account linked successfully! 🎉");
+            window.location.reload(); // Refresh to reflect changes cleanly
+        } catch (error) {
+            console.error("Error linking Google account:", error);
+            if (error.code === 'auth/credential-already-in-use') {
+                toast.error("This Google account is already linked to another user.");
+            } else {
+                toast.error("Failed to link Google account.");
+            }
+        } finally {
+            setIsLinking(false);
+        }
+    };
+
+    // 4. Handle Logout
     const handleLogout = async () => {
         try {
             await signOut(auth);
@@ -84,21 +117,21 @@ export const Profile = () => {
         }
     };
 
-    // Helper to get initials for the avatar (e.g., "Ashish Pingle" -> "AP")
+    // Helper to get initials for the avatar
     const getInitials = (name) => {
-        if(!name) return "C";
+        if (!name) return "C";
         const parts = name.trim().split(" ");
-        if(parts.length >= 2){
+        if (parts.length >= 2) {
             return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
         }
-        return name.substring(0,2).toUpperCase();
-    }
+        return name.substring(0, 2).toUpperCase();
+    };
 
-return (
+    return (
         <div className={`fixed inset-0 flex flex-col bg-[#F9FAFB] overflow-hidden ${slideClass}`}>
+            <Toaster position="top-center" />
 
             <div className="flex-1 overflow-y-auto pb-24" style={{ scrollbarWidth: 'none' }}>
-                {/* Top Bar (No Home Icon as requested) */}
                 <div className='bg-white px-4 py-4 flex items-center gap-4 border-b border-gray-200'>
                     <button onClick={() => navigate(-1)} className='text-gray-800 hover:opacity-80 transition'>
                         <ArrowLeft size={24} />
@@ -114,8 +147,6 @@ return (
                     <>
                         {/* Profile Header Card */}
                         <div className='bg-white rounded-2xl p-6 border border-gray-200 shadow-sm flex flex-col items-center text-center relative'>
-                            
-                            {/* Avatar */}
                             <div className='relative mb-4'>
                                 <div className='w-24 h-24 bg-[#1048A4] text-white rounded-full flex items-center justify-center text-3xl font-bold shadow-md'>
                                     {getInitials(user.name)}
@@ -125,7 +156,7 @@ return (
                             <h2 className='text-xl font-bold text-gray-900'>
                                 {user.name || "Contractor User"}
                             </h2>
-                            <p className='text-sm text-gray-500 font-medium mt-0.5'>Contractor</p>
+                            <p className='text-sm text-gray-500 font-medium mt-0.5'>Manager / Contractor</p>
 
                             {/* Info Rows */}
                             <div className='w-full mt-6 space-y-3 text-left border-t border-gray-100 pt-4'>
@@ -140,9 +171,9 @@ return (
 
                                 <div className='flex items-center gap-3 p-3 bg-gray-50 rounded-xl'>
                                     <div className='text-blue-600 bg-blue-50 p-2 rounded-lg'><Mail size={20} /></div>
-                                    <div>
+                                    <div className='flex-1 min-w-0'>
                                         <p className='text-xs text-gray-400 font-semibold'>Email</p>
-                                        <p className='text-sm font-bold text-gray-800'>{user.email || "Not linked via Gmail"}</p>
+                                        <p className='text-sm font-bold text-gray-800 truncate'>{user.email || "Not linked via Gmail"}</p>
                                     </div>
                                 </div>
 
@@ -157,20 +188,31 @@ return (
                             </div>
                         </div>
 
+                        {/* Link Google Button (Appears if email isn't linked yet) */}
+                        {!user.email && (
+                            <button 
+                                onClick={handleLinkGoogle}
+                                disabled={isLinking}
+                                className='w-full bg-white border-2 border-[#1048A4] text-[#1048A4] hover:bg-blue-50 font-bold py-3.5 rounded-xl shadow-sm transition active:scale-[0.98] flex items-center justify-center gap-2'>
+                                <LinkIcon size={18} />
+                                {isLinking ? "Linking Account..." : "Link Google Account to This Data"}
+                            </button>
+                        )}
+
                         {/* Edit Profile Button */}
                         <button 
                             onClick={() => setIsEditModalOpen(true)}
-                            className='w-full bg-white border border-blue-600 text-blue-600 hover:bg-blue-50 font-bold py-3.5 rounded-xl shadow-sm transition active:scale-[0.98] flex items-center justify-center gap-2'>
-                            <Edit3 size={20} />
+                            className='w-full bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-bold py-3.5 rounded-xl shadow-sm transition active:scale-[0.98] flex items-center justify-center gap-2'>
+                            <Edit3 size={18} />
                             Edit Profile
                         </button>
 
-                        {/* Log Out Section (Secure & Verified Box completely removed as requested) */}
+                        {/* Log Out Section */}
                         <div className='pt-2'>
                             <button 
                                 onClick={handleLogout}
                                 className='w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold py-3.5 rounded-xl transition active:scale-[0.98] flex items-center justify-center gap-2'>
-                                <LogOut size={20} />
+                                <LogOut size={18} />
                                 Log Out
                             </button>
                             <p className='text-xs text-center text-gray-400 mt-2 px-4'>
@@ -185,7 +227,6 @@ return (
             {isEditModalOpen && (
                 <div className='fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4'>
                     <div className='bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 relative'>
-                        
                         <div className='flex justify-between items-center mb-4'>
                             <h2 className='text-lg font-bold text-gray-800'>Edit Profile</h2>
                             <button onClick={() => setIsEditModalOpen(false)} className='text-gray-400 hover:text-black'>
@@ -224,7 +265,6 @@ return (
                                 {isSaving ? "Saving..." : "Save Changes"}
                             </button>
                         </form>
-
                     </div>
                 </div>
             )}

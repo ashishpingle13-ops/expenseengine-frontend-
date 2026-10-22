@@ -244,7 +244,7 @@ const WorkerLedger = () => {
                                             <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Amount</span>
                                         </div>
 
-                                        `{/* 4. LEDGER LIST */}
+                                        {/* 4. LEDGER LIST */}
                                         <section className="flex-1 overflow-y-auto bg-white pb-28">
                                             {isLoading ? (
                                                 <p className="text-center text-gray-500 py-8 text-sm font-medium">Loading history...</p>
@@ -289,7 +289,7 @@ const WorkerLedger = () => {
                                                     <p className="text-gray-400 text-sm font-semibold">No transactions for {profilePeriod}</p>
                                                 </div>
                                             )}
-                                        </section>`
+                                        </section>
 
                                     {/* 5. FLOATING BOTTOM BUTTON */}
                                     {isActive && (
@@ -307,7 +307,7 @@ const WorkerLedger = () => {
                                             <Plus className="w-5 h-5" /> LOG ADVANCE
                                         </button>
                                     </div>
-                                )}``
+                                )}
 
            
                         {/* 6. UNIFIED ADD/EDIT MODAL (True Bottom Sheet) */}
