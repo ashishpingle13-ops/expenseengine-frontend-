@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Expense Engine</string>
+    <string name="title_activity_main">Expense Engine</string>
+    <string name="package_name">com.expenseengine.app</string>
+    <string name="custom_url_scheme">com.expenseengine.app</string>
+</resources>

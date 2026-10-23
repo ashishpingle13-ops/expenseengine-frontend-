@@ -66,6 +66,8 @@ export default function Login() {
   const handleGoogleLogin = async () => {
     if (isSigningIn) return;
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+
     try {
       setIsSigningIn(true);
       const googleLogin = await signInWithPopup(auth, provider);
@@ -94,30 +96,32 @@ export default function Login() {
   // 3. INITIAL SESSION RESTORE SPINNER
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#F9FAFB] flex flex-col justify-center items-center">
+      <div className="min-h-[100dvh] w-full bg-[#F9FAFB] flex flex-col justify-center items-center">
         <div className="w-10 h-10 border-4 border-[#1048A4] border-t-transparent rounded-full animate-spin"></div>
         <p className="mt-4 text-gray-600 text-sm font-bold tracking-wide">Restoring session...</p>
       </div>
     );
   }
 
-// 4. NEW DESIGN UI
+  // 4. NEW DESIGN UI (Full Mobile Screen Fit)
   return (
-    <main className="fixed inset-0 mx-auto flex w-full max-w-md flex-col overflow-hidden bg-[#1048A4] text-gray-900 font-sans select-none">
-     {/* TOP ROYAL BLUE HERO SECTION */}
-      <section className="relative flex-1 bg-[linear-gradient(to_right,#ffffff0a_1px,transparent_1px),linear-gradient(to_bottom,#ffffff0a_1px,transparent_1px)] bg-[size:24px_24px] px-5 pb-8 pt-4">
-        <div className="pointer-events-none absolute -right-24 -top-20 h-72 w-72 rounded-full bg-blue-300/15 blur-3xl" />
-        <div className="pointer-events-none absolute -left-24 bottom-0 h-64 w-64 rounded-full bg-[#FFD700]/10 blur-3xl" />
+    <main className="fixed inset-0 flex h-[100dvh] w-full flex-col justify-between overflow-hidden bg-[#0A3D91] bg-[linear-gradient(to_right,#ffffff0a_1px,transparent_1px),linear-gradient(to_bottom,#ffffff0a_1px,transparent_1px)] bg-[size:24px_24px]">
+      {/* BACKGROUND GLOWS */}
+      <div className="pointer-events-none absolute -right-24 -top-20 h-72 w-72 rounded-full bg-blue-300/15 blur-3xl" />
+      <div className="pointer-events-none absolute -left-24 bottom-32 h-64 w-64 rounded-full bg-[#FFD700]/10 blur-3xl" />
 
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/10">
+      {/* TOP ROYAL BLUE HERO & PREVIEW WRAPPER */}
+      <div className="relative z-10 flex flex-1 flex-col justify-evenly px-5 pt-4 pb-2 min-h-0">
+        {/* HEADER BAR */}
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/10">
             <Wallet className="h-5 w-5 text-[#FFD700]" strokeWidth={2.2} />
           </div>
           <div className="min-w-0">
-            <div className="text-[15px] font-semibold uppercase leading-none tracking-wider text-white">
+            <div className="text-[14px] font-semibold uppercase leading-none tracking-wider text-white">
               Expense Engine
             </div>
-            <div className="mt-1.5 text-[10px] font-semibold uppercase tracking-widest text-blue-200">
+            <div className="mt-1 text-[10px] font-semibold uppercase tracking-widest text-blue-200">
               Manager Cashbook
             </div>
           </div>
@@ -127,118 +131,119 @@ export default function Login() {
           </div>
         </div>
 
-        <div className="relative z-10 mt-6">
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-200">
+        {/* HERO HEADLINE */}
+        <div className="shrink-0 my-1">
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-200">
             Business money, under control
           </div>
-          <div className="text-[30px] font-bold leading-[1.15] tracking-tight text-white">
+          <div className="text-[26px] sm:text-[30px] font-bold leading-[1.12] tracking-tight text-white">
             Every rupee. Every team.
           </div>
-          <div className="text-[30px] font-bold leading-[1.15] tracking-tight text-[#FFD700]">
+          <div className="text-[26px] sm:text-[30px] font-bold leading-[1.12] tracking-tight text-[#FFD700]">
             One ledger.
           </div>
         </div>
-      </section>
 
-      {/* FLOATING CASHBOX PREVIEW CARD (Pulled up smoothly into the hero) */}
-        <section className="relative z-20 mx-5 -mt-10 overflow-visible rounded-2xl border border-gray-100 bg-white p-3.5 shadow-[0_12px_32px_rgba(16,72,164,0.18)]">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-[#1048A4]">
-              <BriefcaseBusiness className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                Company Cashbox
+        {/* FLOATING CASHBOX PREVIEW CARD */}
+        <section className="relative z-20 shrink-0 rounded-2xl border border-gray-100 bg-white p-3.5 shadow-[0_12px_32px_rgba(0,0,0,0.22)]">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-[#1048A4]">
+                <BriefcaseBusiness className="h-4 w-4" />
               </div>
-              <div className="truncate text-[14px] font-bold text-gray-900">
-                Operations &amp; Team Ledger
+              <div className="min-w-0">
+                <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400">
+                  Company Cashbox
+                </div>
+                <div className="truncate text-[13px] font-bold text-gray-900">
+                  Operations &amp; Team Ledger
+                </div>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 text-gray-600">
+                <QrCode className="h-3.5 w-3.5" />
+              </div>
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#1048A4] text-white">
+                <FileDown className="h-3.5 w-3.5" />
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600">
-              <QrCode className="h-4 w-4" />
-            </div>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1048A4] text-white">
-              <FileDown className="h-4 w-4" />
-            </div>
-          </div>
-        </div>
 
-        <div className="mt-3 flex items-end justify-between border-t border-dashed border-gray-200 pt-3">
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-              Available Balance
+          <div className="mt-2.5 flex items-end justify-between border-t border-dashed border-gray-200 pt-2.5">
+            <div>
+              <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400">
+                Available Balance
+              </div>
+              <div className="mt-0.5 text-[24px] font-bold leading-none tabular-nums text-green-500">
+                ₹1,45,000
+              </div>
             </div>
-            <div className="mt-1 text-[26px] font-bold leading-none tabular-nums text-green-500">
-              ₹1,45,000
+            <div className="flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2.5 py-0.5 text-[9px] font-extrabold uppercase tracking-widest text-[#0E793C]">
+              <CheckCircle2 className="h-3 w-3" />
+              Surplus
             </div>
           </div>
-          <div className="flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-widest text-[#0E793C]">
-            <CheckCircle2 className="h-3 w-3" />
-            Surplus
-          </div>
-        </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-2.5 border-t border-gray-100 pt-3">
-          <div className="rounded-xl border border-green-100 bg-green-50/60 px-3 py-2">
-            <div className="text-[9px] font-bold uppercase tracking-wider text-gray-500">
-              Funds In (Deposits)
+          <div className="mt-2.5 grid grid-cols-2 gap-2 border-t border-gray-100 pt-2.5">
+            <div className="rounded-xl border border-green-100 bg-green-50/60 px-2.5 py-1.5">
+              <div className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
+                Funds In (Deposits)
+              </div>
+              <div className="mt-0.5 text-[12px] font-extrabold text-[#0E793C]">+ ₹2,10,000</div>
             </div>
-            <div className="mt-0.5 text-[13px] font-extrabold text-[#0E793C]">+ ₹2,10,000</div>
-          </div>
-          <div className="rounded-xl border border-pink-100 bg-pink-50/60 px-3 py-2">
-            <div className="text-[9px] font-bold uppercase tracking-wider text-gray-500">
-              Team Advances &amp; Exp
+            <div className="rounded-xl border border-pink-100 bg-pink-50/60 px-2.5 py-1.5">
+              <div className="text-[8px] font-bold uppercase tracking-wider text-gray-500">
+                Team Advances &amp; Exp
+              </div>
+              <div className="mt-0.5 text-[12px] font-extrabold text-[#9D0052]">− ₹65,000</div>
             </div>
-            <div className="mt-0.5 text-[13px] font-extrabold text-[#9D0052]">− ₹65,000</div>
           </div>
-        </div>
 
-        <div className="mt-3 flex items-center justify-between gap-2 border-t border-gray-100 pt-2.5 text-[9px] font-bold text-gray-500">
-          <div className="flex items-center gap-1 whitespace-nowrap">
-            <Zap className="h-3 w-3 text-[#FFD700]" fill="currentColor" />
-            Instant UPI QR
+          <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-gray-100 pt-2 text-[9px] font-bold text-gray-500">
+            <div className="flex items-center gap-1 whitespace-nowrap">
+              <Zap className="h-3 w-3 text-[#FFD700]" fill="currentColor" />
+              Instant UPI QR
+            </div>
+            <div className="h-3 w-px bg-gray-200" />
+            <div className="flex items-center gap-1 whitespace-nowrap">
+              <FileText className="h-3 w-3 text-[#1048A4]" />
+              PDF/CSV Export
+            </div>
+            <div className="h-3 w-px bg-gray-200" />
+            <div className="flex items-center gap-1 whitespace-nowrap">
+              <Cloud className="h-3 w-3 text-[#0E793C]" />
+              Offline Sync
+            </div>
           </div>
-          <div className="h-3 w-px bg-gray-200" />
-          <div className="flex items-center gap-1 whitespace-nowrap">
-            <FileText className="h-3 w-3 text-[#1048A4]" />
-            PDF/CSV Export
-          </div>
-          <div className="h-3 w-px bg-gray-200" />
-          <div className="flex items-center gap-1 whitespace-nowrap">
-            <Cloud className="h-3 w-3 text-[#0E793C]" />
-            Offline Sync
-          </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
       {/* BOTTOM LOGIN ACTION SHEET */}
-        <section className="relative z-30 mt-3 rounded-t-3xl border-t border-gray-100 bg-white px-6 pb-4 pt-3 shadow-[0_-8px_30px_rgba(0,0,0,0.08)]">
-            <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-gray-200" />
-            <div className="text-[20px] font-bold tracking-tight text-gray-900">Welcome Back</div>
-            <div className="mb-3 mt-0.5 text-[12px] font-medium leading-relaxed text-gray-500">
-            Sign in with your Google account to sync your manager cashbook and team ledgers.
-            </div>
+      <section className="relative z-30 shrink-0 rounded-t-3xl border-t border-gray-100 bg-white px-6 pb-5 pt-3 shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
+        <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-gray-200" />
+        <div className="text-[19px] font-bold tracking-tight text-gray-900">Welcome Back</div>
+        <div className="mb-3 mt-0.5 text-[12px] font-medium leading-relaxed text-gray-500">
+          Sign in with your Google account to sync your manager cashbook and team ledgers.
+        </div>
 
-            <button
-            type="button"
-            disabled={isSigningIn}
-            onClick={handleGoogleLogin}
-            className="flex w-full items-center justify-center gap-3 rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-[15px] font-extrabold text-gray-800 shadow-sm transition-all hover:bg-gray-50 active:scale-[0.99] disabled:opacity-60 cursor-pointer"
-            >
-            <GoogleLogo />
-            {isSigningIn ? "Signing in..." : "Continue with Google"}
-            </button>
+        <button
+          type="button"
+          disabled={isSigningIn}
+          onClick={handleGoogleLogin}
+          className="flex w-full items-center justify-center gap-3 rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-[15px] font-extrabold text-gray-800 shadow-sm transition-all hover:bg-gray-50 active:scale-[0.99] disabled:opacity-60 cursor-pointer"
+        >
+          <GoogleLogo />
+          {isSigningIn ? "Signing in..." : "Continue with Google"}
+        </button>
 
-            <div className="mt-4 flex items-center justify-center gap-1.5 text-center pb-2">
-            <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[#0E793C]" />
-            <span className="text-[11px] font-semibold text-gray-400">
-                256-Bit Encrypted • Instant Cloud Backup • Free Forever
-            </span>
-            </div>
-        </section>
+        <div className="mt-3.5 flex items-center justify-center gap-1.5 text-center">
+          <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[#0E793C]" />
+          <span className="text-[10px] font-semibold text-gray-400">
+            256-Bit Encrypted • Instant Cloud Backup • Free Forever
+          </span>
+        </div>
+      </section>
     </main>
   );
 }
