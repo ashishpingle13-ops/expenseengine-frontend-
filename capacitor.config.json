@@ -1,0 +1,9 @@
+{
+  "appId": "com.expenseengine.app",
+  "appName": "Expense Engine",
+  "webDir": "dist",
+  "server": {
+    "url": "https://your-frontend-name.vercel.app",
+    "cleartext": true
+  }
+}

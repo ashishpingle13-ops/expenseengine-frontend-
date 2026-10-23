@@ -51,12 +51,15 @@ const EditWorker = () => {
 
   try {
     setIsSaving(true);
-
+    let updatedUpiId = upiId.trim();
+    if (workerToEdit?.phoneNumber && updatedUpiId.startsWith(workerToEdit.phoneNumber)) {
+        updatedUpiId = updatedUpiId.replace(workerToEdit.phoneNumber, phone);
+    }
     // Pass upiId along with name and phone
     await api.put(`/workers/${workerId}`, { 
         name: name.trim(), 
         phoneNumber: phone, 
-        upiId, 
+        upiId, updatedUpiId,
         isActive 
     });
 

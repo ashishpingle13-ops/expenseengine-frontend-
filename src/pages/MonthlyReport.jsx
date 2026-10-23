@@ -7,6 +7,7 @@ import useSWR from 'swr';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import toast from 'react-hot-toast';
+import { saveOrSharePdf, saveOrShareCsv } from '../lib/qrUtils';
 
 
   function ReportDocIcon({ className = "w-5 h-5" }) {
@@ -67,7 +68,7 @@ const MonthlyReport = () => {
   );
 
   // ─── EXCEL (CSV) EXPORT ─────────────────────────────────────────────
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     let csvContent = "Worker Name,Nights,Veg,Non-Veg,Paise,Absent\n";
 
     workerBreakdown.forEach(w => {
@@ -76,25 +77,16 @@ const MonthlyReport = () => {
 
     csvContent += `\nGRAND TOTALS,-,${totalVeg},${totalNonVeg},${totalPaise},${totalAbsent}\n`;
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Monthly_Report_${dayjs(selectedMonth).format('MMM_YYYY')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
+    await saveOrShareCsv(csvContent, `Monthly_Report_${dayjs(selectedMonth).format('MMM_YYYY')}.csv`);
     setShowExportModal(false);
     toast.success("Excel downloaded!");
   };
 
-  // ─── EXCEL (CSV) EXPORT ─────────────────────────────────────────────
-  const handleExportPDF = () => {
+  // ─── PDF EXPORT ─────────────────────────────────────────────────────
+  const handleExportPDF = async () => {
     const doc = new jsPDF();
     const monthText = dayjs(selectedMonth).format('MMMM YYYY');
 
-    // Header 
     doc.setFontSize(18);
     doc.setTextColor(14, 121, 60);
     doc.text("Monthly Summary Report", 14, 20);
@@ -103,17 +95,14 @@ const MonthlyReport = () => {
     doc.setTextColor(100);
     doc.text(`Period: ${monthText}`, 14, 28);
 
-    // Summary box
     doc.setFontSize(10);
     doc.setTextColor(0);
     doc.text(`Total Veg: ${totalVeg}   |   Total Non-Veg: ${totalNonVeg}   |   Total Paise: ${totalPaise}   |   Total Absent: ${totalAbsent}`, 14, 38);
 
-    // Format the table data
     const tableRows = workerBreakdown.map(w => [
       w.name, w.nights, w.veg, w.nonveg, w.paise, w.absent
     ]);
 
-    // Generate the Table
     autoTable(doc, {
       startY: 45,
       head: [['Worker Name', 'Nights', 'Veg', 'N-Veg', 'Paise', 'Absent']],
@@ -124,12 +113,10 @@ const MonthlyReport = () => {
       columnStyles: { 0: { fontStyle: 'bold' } } 
     });
 
-    // Download
-    doc.save(`Monthly_Report_${dayjs(selectedMonth).format('MMM_YYYY')}.pdf`);
-
+    await saveOrSharePdf(doc, `Monthly_Report_${dayjs(selectedMonth).format('MMM_YYYY')}.pdf`);
     setShowExportModal(false);
     toast.success("PDF downloaded!");
-  }
+  };
 
 
   return (

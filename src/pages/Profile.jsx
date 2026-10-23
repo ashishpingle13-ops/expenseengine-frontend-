@@ -107,7 +107,8 @@ export const Profile = () => {
     const handleLogout = async () => {
         try {
             await signOut(auth);
-            localStorage.clear();
+           localStorage.removeItem("authToken");
+            localStorage.removeItem("expenseengine-cache");
             await mutate(() => true, undefined, { revalidate: false });
             toast.success("Logged out successfully");
             navigate('/');

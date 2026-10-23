@@ -9,7 +9,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import useSWR, { mutate } from 'swr';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { generateDynamicUpiQrDataUrl, shareQrImageToUpiApp } from '../lib/qrUtils';
+import { generateDynamicUpiQrDataUrl, shareQrImageToUpiApp, saveOrShareCsv, saveOrSharePdf } from '../lib/qrUtils';
 import TransactionModal from '../components/TransactionModal';
 
 
@@ -123,28 +123,37 @@ const CashbookPage = () => {
     }
 
     // Handle Worker Advance Submission (Moved from Dashboard!)
-   const handleSubmitAdvance = async (e) => {
-        if (e && typeof e.preventDefault === 'function') e.preventDefault();
-        if(!selectedWorkerId){
+   // 1A. Triggered ONLY when Dad taps "PAY ₹X ON GPAY"
+    const handlePayOnlineAdvance = async () => {
+        if (!selectedWorkerId) {
             toast.error("Please select a worker!");
             return;
         }
-
         const amountNum = Number(advanceAmount);
+        if (!amountNum || amountNum <= 0) {
+            toast.error("Please enter a valid amount!");
+            return;
+        }
+
         const workerObj = workers.find(w => (w._id || w.id) === selectedWorkerId);
         const workerName = workerObj?.name || 'Worker';
         const note = advanceNotes || `Advance for ${workerName}`;
+        const finalUpiId = workerObj?.upiId || localStorage.getItem(`upi_${selectedWorkerId}`) || (workerObj?.phoneNumber ? `${workerObj.phoneNumber}@ybl` : '');
 
-        // If Online is selected and we aren't already waiting for confirmation
-        if (advancePaymentMethod === 'Online' && !isWaitingForUpi && !isUpiRedirecting) {
-            const finalUpiId = workerObj?.upiId || localStorage.getItem(`upi_${selectedWorkerId}`) || (workerObj?.phoneNumber ? `${workerObj.phoneNumber}@ybl` : '');
-            
-            if (!finalUpiId) {
-                toast.error('Please add a phone number or UPI ID for this worker first!');
-                return;
-            }
+        if (!finalUpiId) {
+            toast.error('Please add a phone number or UPI ID for this worker first!');
+            return;
+        }
 
-            // 1. Save payload data temporarily
+        try {
+            // Generate QR first and IMMEDIATELY trigger native share sheet (while user gesture is active!)
+            const { dataUrl } = await generateDynamicUpiQrDataUrl({
+                upiId: finalUpiId,
+                workerName,
+                amount: amountNum,
+                note
+            });
+
             setPendingUpiData({
                 entryType: "Advance",
                 workerId: selectedWorkerId,
@@ -152,28 +161,33 @@ const CashbookPage = () => {
                 paymentMethod: "Online",
                 description: advanceNotes,
                 date: dayjs(`${entryDate}T${entryTime}`).toISOString(),
-                workerName: workerName,
-                upiId: finalUpiId
+                workerName,
+                upiId: finalUpiId,
+                qrDataUrl: dataUrl
             });
 
-            // 2. Close the Log Advance bottom sheet immediately so Cashbook is behind the blur
             setShowWorkerModal(false);
 
-            // 3. Lock the entire screen so nothing can be tapped for 3.5 seconds
-            setIsUpiRedirecting(true);
+            // Auto-share the QR image to GPay / PhonePe immediately
+            await shareQrImageToUpiApp(dataUrl, workerName, amountNum);
 
-            // 4. Generate & Share QR Code with finalUpiId
-            triggerUpiPayment(amountNum, note, finalUpiId, workerName);
+            // Show confirmation popup when returning to the app
+            setIsWaitingForUpi(true);
+        } catch (err) {
+            console.error("QR Share error:", err);
+            setIsWaitingForUpi(true);
+        }
+    };
 
-            // 5. Wait 3.5 seconds, then unlock into the Yes/No confirmation modal
-            setTimeout(() => {
-                setIsUpiRedirecting(false);
-                setIsWaitingForUpi(true);
-            }, 3500);
+    // 1B. Standard Save Flow (Triggered by "SAVE ONLY", "SAVE ADVANCE", or "Yes (Complete & Save)")
+    const handleSubmitAdvance = async (e) => {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        if (!pendingUpiData && !selectedWorkerId) {
+            toast.error("Please select a worker!");
             return;
         }
 
-        // Standard save flow (for Cash, Check, or confirming Online)
+        const amountNum = Number(advanceAmount);
         try {
             setIsSubmittingPayment(true);
             const payload = pendingUpiData ? {
@@ -195,7 +209,6 @@ const CashbookPage = () => {
             await api.post("/ledger", payload);
             toast.success("Advance payment logged successfully! 🎉");
 
-            // Reset form and close modal
             setSelectedWorkerId("");
             setAdvanceAmount("");
             setAdvanceNotes("");
@@ -210,30 +223,8 @@ const CashbookPage = () => {
             toast.error(error.response?.data?.message || "Failed to log advance payment.");
         } finally {
             setIsSubmittingPayment(false);
-            // setIsWaitingForUpi(false);
         }
     };
-
-
-       const triggerUpiPayment = async (amount, note, workerUpiId, workerName) => {
-            try {
-                // 1. Generate crisp QR image with the exact amount baked in
-                const { dataUrl } = await generateDynamicUpiQrDataUrl({
-                    upiId: workerUpiId,
-                    workerName,
-                    amount,
-                    note
-                });
-
-                // Save QR image in state so the confirmation popup can also display it!
-                setPendingUpiData(prev => prev ? { ...prev, qrDataUrl: dataUrl, upiId: workerUpiId } : prev);
-
-                // 2. Open Android native Share Sheet -> Select "Google Pay" or "PhonePe" to scan immediately!
-                await shareQrImageToUpiApp(dataUrl, workerName, amount);
-            } catch (err) {
-                console.error("QR Share error:", err);
-            }
-        };
 
     const handleBossSubmit = async (e) => {
         if(e) e.preventDefault();
@@ -319,7 +310,8 @@ const CashbookPage = () => {
     // ==========================================
     // 🖨️ EXPORT LOGIC (PDF & EXCEL)
     // ==========================================
-    const handleExportExcel = () => {
+   // ─── EXCEL (CSV) EXPORT ─────────────────────────────────────────────
+    const handleExportExcel = async () => {
         try {
             let csvContent = "Date,Type,Details,Amount (INR)\n";
             
@@ -341,21 +333,14 @@ const CashbookPage = () => {
                         desc = desc ? `${workerName} - ${desc}` : workerName;
                     }
                     
-                    // Add + or - sign to the amount for Excel
                     const amountStr = isDeposit ? `+${entry.amount}` : `-${entry.amount}`;
-                    
                     return `"${date}","${type}","${desc}","${amountStr}"`;
                 });
                 
             csvContent += rows.join("\n");
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
-            const url = URL.createObjectURL(blob);
-            link.setAttribute("href", url);
-            link.setAttribute("download", `Cashbook_${selectedDate}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            
+            // 🌟 Calls our universal helper for APK & Web
+            await saveOrShareCsv(csvContent, `Cashbook_${selectedDate}.csv`);
             
             setShowExportModal(false);
             toast.success("Excel downloaded successfully! 📊");
@@ -366,11 +351,11 @@ const CashbookPage = () => {
     };
 
 
-   const handleExportPDF = () => {
+    // ─── PDF EXPORT ─────────────────────────────────────────────────────
+    const handleExportPDF = async () => {
         try {
             const doc = new jsPDF();
             
-            // Header Info
             doc.setFontSize(16);
             doc.text(`Cashbook Ledger - ${dayjs(selectedDate).format('MMMM YYYY')}`, 14, 20);
             
@@ -379,11 +364,8 @@ const CashbookPage = () => {
             doc.text(`Total Deposits (IN): Rs. ${formatMoney(totalMonthlyDeposits).replace('₹', '').trim()}`, 14, 36);
             doc.text(`Total Advances (OUT): Rs. ${formatMoney(monthlyAdvances).replace('₹', '').trim()}`, 14, 42);
 
-            // Table Data
             const tableColumn = ["Date", "Type", "Details", "Amount"];
             const tableRows = [];
-
-            // We need to keep track of which rows are deposits vs advances for styling later
             const rowTypes = [];
 
             currentMonthLedger
@@ -404,42 +386,38 @@ const CashbookPage = () => {
                         desc = desc ? `${workerName} - ${desc}` : workerName;
                     }
                     
-                    // Format Amount String
                     const amountStr = isDeposit ? `+ Rs. ${entry.amount}` : `- Rs. ${entry.amount}`;
-                    
                     tableRows.push([date, type, desc, amountStr]);
-                    rowTypes.push(isDeposit ? 'deposit' : 'advance'); // Store the type for styling
+                    rowTypes.push(isDeposit ? 'deposit' : 'advance');
                 });
 
-            // Generate Table with Dynamic Colors
             autoTable(doc, {
                 head: [tableColumn],
                 body: tableRows,
                 startY: 50,
                 theme: 'striped',
                 headStyles: { fillColor: [16, 72, 164] },
-                // Use a hook to style specific cells after they are drawn
                 didParseCell: function(data) {
-                    // Check if we are in the body of the table and formatting the "Amount" column (index 3)
                     if (data.section === 'body' && data.column.index === 3) {
                         const rowType = rowTypes[data.row.index];
                         if (rowType === 'deposit') {
-                            data.cell.styles.textColor = [14, 121, 60]; // Green (#0E793C)
+                            data.cell.styles.textColor = [14, 121, 60];
                             data.cell.styles.fontStyle = 'bold';
                         } else if (rowType === 'advance') {
-                            data.cell.styles.textColor = [192, 57, 43]; // Red (#C0392B)
+                            data.cell.styles.textColor = [192, 57, 43];
                             data.cell.styles.fontStyle = 'bold';
                         }
                     }
                 }
             });
 
-            doc.save(`Cashbook_${selectedDate}.pdf`);
+            // 🌟 Calls our universal helper for APK & Web
+            await saveOrSharePdf(doc, `Cashbook_${selectedDate}.pdf`);
             setShowExportModal(false);
             toast.success("PDF downloaded successfully! 📄");
         } catch (error) {
             console.error("PDF generation error:", error);
-            toast.error("Failed to generate PDF. Make sure jspdf is installed.");
+            toast.error("Failed to generate PDF.");
         }
     };
     
@@ -780,6 +758,8 @@ return (
                                                 if (updated.notes !== undefined) setAdvanceNotes(updated.notes);
                                             } else {
                                                 setBossFormData(prev => ({ ...prev, ...updated }));
+                                                if (updated.entryDate !== undefined) setEntryDate(updated.entryDate);
+                                                if (updated.entryTime !== undefined) setEntryTime(updated.entryTime);
                                             }
                                         }}
                                         workers={workers}
@@ -792,6 +772,7 @@ return (
                                         isWaitingForUpi={isWaitingForUpi}
                                         pendingUpiData={pendingUpiData}
                                         onCancelUpi={() => { setIsWaitingForUpi(false); setPendingUpiData(null); setShowWorkerModal(false); }}
+                                        onPayOnline={handlePayOnlineAdvance}
                                     />
             
             {/* 6. EXPORT LEDGER MODAL (Centered Pop-in) */}

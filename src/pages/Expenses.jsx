@@ -22,6 +22,7 @@ import dayjs from 'dayjs';
 import useSWR from 'swr';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { saveOrSharePdf, saveOrShareCsv } from '../lib/qrUtils';
 
 
 
@@ -201,11 +202,9 @@ const handleSave = async () => {
 
 
   // ─── EXCEL (CSV) EXPORT ─────────────────────────────────────────────
-  const handleExportExcel = () => {
-    // Create Headers
+  const handleExportExcel = async () => {
     let csvContent = "Date,Time,Category,Description,Amount (INR),Balance (INR)\n";
 
-    // Loop through your chronological ledger and build the rows
     [...ledger].reverse().forEach(({ dk, rows}) => {
       [...rows].reverse().forEach(row => {
         const method = row.paymentMethod || "Cash";
@@ -218,42 +217,30 @@ const handleSave = async () => {
       });
     });
 
-    // Trigger Download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Site_Expenses_${currentMonth.format('MMM_YYYY')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
+    await saveOrShareCsv(csvContent, `Site_Expenses_${currentMonth.format('MMM_YYYY')}.csv`);
     setUiState("default");
-    toast.success(" Excel downloaded! ");
-  }
+    toast.success("Excel downloaded!");
+  };
 
 
-  // ─── PDF EXPORT ────────────────────────────────────────
-  const handleExportPDF = () => {
+  // ─── PDF EXPORT ─────────────────────────────────────────────────────
+  const handleExportPDF = async () => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
 
-    // Header
     doc.setFontSize(18);
-    doc.setTextColor(157, 0, 82)
+    doc.setTextColor(157, 0, 82);
     doc.text("Site Expense Report", 14, 20);
 
     doc.setFontSize(11);
     doc.setTextColor(100);
     doc.text(`Billing Period: ${dateDisplay}`, 14, 28);
 
-    // Summary Box
     doc.setFontSize(10);
     doc.setTextColor(0);
     doc.text(`Total Spent: Rs. ${monthlyExpenses.toLocaleString("en-IN")}`, 14, 38);
     doc.text(`Final Balance: Rs. ${currentBalance.toLocaleString("en-IN")}`, pageWidth - 14, 38, { align: "right" });
 
-    // Format the table data
     const tableRows = [];
     [...ledger].reverse().forEach(({ dk, rows}) => {
       [...rows].reverse().forEach(row => {
@@ -273,7 +260,6 @@ const handleSave = async () => {
       });
     });
 
-    // Generate the Table
     autoTable(doc,{
       startY: 45,
       head: [['Date', 'Category', 'Description', 'Amount', 'Balance']],
@@ -287,12 +273,10 @@ const handleSave = async () => {
       }
     });
 
-    // Download
-    doc.save(`Site_Expenses_${currentMonth.format('MMM_YYYY')}.pdf`);
-    
-    setUiState("default"); // Close the modal
+    await saveOrSharePdf(doc, `Site_Expenses_${currentMonth.format('MMM_YYYY')}.pdf`);
+    setUiState("default");
     toast.success("PDF downloaded!");
-  }
+  };
 
 
   // ─── Floating Action Button ────────────────────────────────────────────────

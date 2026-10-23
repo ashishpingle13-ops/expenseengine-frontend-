@@ -18,13 +18,13 @@ export default function TransactionModal({
     isSubmitting = false,
     isWaitingForUpi = false,
     pendingUpiData = null,
-    onCancelUpi = null
+    onCancelUpi = null,
+    onPayOnline = null
 }) {
     if (!isOpen) return null;
 
     const isAdvance = type === "Advance";
     const primaryColor = isAdvance ? "#9D0052" : "#0E793C";
-    const hoverColor = isAdvance ? "#800043" : "#0A5C2D";
     const selectedWorker = workers.find(w => (w._id || w.id) === formData.selectedWorkerId);
 
     return (
@@ -85,7 +85,7 @@ export default function TransactionModal({
                         </div>
 
                         {/* Worker Selector (Only for Advances) */}
-                        {isAdvance && (
+                        {isAdvance && workers.length > 0 && (
                             <div className="mb-3 relative">
                                 <label className="block text-[11px] font-semibold text-gray-400 uppercase mb-1">Worker</label>
                                 <button
@@ -245,23 +245,44 @@ export default function TransactionModal({
                             </button>
                         </div>
                     </div>
+                ) : isAdvance && formData.paymentMethod === 'Online' && !editId ? (
+                    <div className="flex gap-2.5">
+                        {/* Button 1: Save directly to database without opening GPay/QR */}
+                        <button
+                            type="submit"
+                            form="universalTransactionForm"
+                            disabled={isSubmitting}
+                            className="flex-1 text-white text-xs font-extrabold rounded-xl py-3.5 tracking-wider uppercase transition-all active:scale-[0.99] disabled:opacity-70 shadow-md"
+                            style={{ backgroundColor: primaryColor }}
+                        >
+                            {isSubmitting ? "SAVING..." : "SAVE ONLY"}
+                        </button>
+
+                        {/* Button 2: Generate QR and trigger GPay */}
+                        <button
+                            type="button"
+                            disabled={isSubmitting}
+                            onClick={onPayOnline}
+                            className="flex-[1.4] bg-[#1A73E8] hover:bg-blue-700 text-white text-xs font-extrabold rounded-xl py-3.5 px-2 tracking-wider uppercase transition-all active:scale-[0.99] disabled:opacity-70 shadow-md"
+                        >
+                            {`PAY ₹${formData.amount || 0} ON GPAY`}
+                        </button>
+                    </div>
                 ) : (
                     <button 
                         type="submit" 
                         form="universalTransactionForm" 
                         disabled={isSubmitting} 
                         className="w-full text-white text-sm font-bold rounded-xl py-3.5 tracking-wider uppercase transition-all active:scale-[0.99] disabled:opacity-70 shadow-md"
-                        style={{ backgroundColor: isAdvance && formData.paymentMethod === 'Online' ? '#1A73E8' : primaryColor }}
+                        style={{ backgroundColor: primaryColor }}
                     >
                         {isSubmitting 
                             ? "SAVING..." 
                             : editId 
                                 ? "SAVE CHANGES" 
-                                : isAdvance && formData.paymentMethod === 'Online' 
-                                    ? `PAY ₹${formData.amount || 0} ON GPAY` 
-                                    : isAdvance 
-                                        ? "SAVE ADVANCE" 
-                                        : "SAVE DEPOSIT"}
+                                : isAdvance 
+                                    ? "SAVE ADVANCE" 
+                                    : "SAVE DEPOSIT"}
                     </button>
                 )}
             </div>

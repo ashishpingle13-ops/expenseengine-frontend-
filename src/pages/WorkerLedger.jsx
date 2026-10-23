@@ -65,23 +65,26 @@ const WorkerLedger = () => {
 
     const formatMoney = (amount) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(amount);
 
-    // Unified Handle Save (Add & Edit)
-    const handleSave = async (e) => {
-        if (e && typeof e.preventDefault === 'function') e.preventDefault();
-        if (!formData.amount) return toast.error("Amount required!");
-        if (editId && !formData.reason) return toast.error("Reason for Edit is required!");
-
+    // Triggered when clicking "PAY ₹X ON GPAY"
+    const handlePayOnline = async () => {
         const amountNum = Number(formData.amount);
-        const note = formData.notes || `Advance for ${workerName}`;
+        if (!amountNum || amountNum <= 0) return toast.error("Valid positive amount required!");
 
-        // If Online payment is selected and we aren't waiting for confirmation yet
-        if (formData.paymentMethod === 'Online' && !isWaitingForUpi && !isUpiRedirecting && !editId) {
-            const finalUpiId = workerData?.upiId || localStorage.getItem(`upi_${id}`) || (workerData?.phoneNumber ? `${workerData.phoneNumber}@ybl` : '');
-            
-            if (!finalUpiId) {
-                toast.error('Please add a phone number or UPI ID for this worker first!');
-                return;
-            }
+        const note = formData.notes || `Advance for ${workerName}`;
+        const finalUpiId = workerData?.upiId || localStorage.getItem(`upi_${id}`) || (workerData?.phoneNumber ? `${workerData.phoneNumber}@ybl` : '');
+
+        if (!finalUpiId) {
+            toast.error('Please add a phone number or UPI ID for this worker first!');
+            return;
+        }
+
+        try {
+            const { dataUrl } = await generateDynamicUpiQrDataUrl({
+                upiId: finalUpiId,
+                workerName,
+                amount: amountNum,
+                note
+            });
 
             setPendingUpiData({
                 entryType: "Advance",
@@ -90,33 +93,28 @@ const WorkerLedger = () => {
                 paymentMethod: "Online",
                 description: formData.notes,
                 date: dayjs(`${entryDate}T${entryTime}`).toISOString(),
-                workerName: workerName,
-                upiId: finalUpiId
+                workerName,
+                upiId: finalUpiId,
+                qrDataUrl: dataUrl
             });
 
             setShowModal(false);
-            setIsUpiRedirecting(true);
-
-            // Generate & share QR Code
-            try {
-                const { dataUrl } = await generateDynamicUpiQrDataUrl({
-                    upiId: finalUpiId,
-                    workerName,
-                    amount: amountNum,
-                    note
-                });
-                setPendingUpiData(prev => prev ? { ...prev, qrDataUrl: dataUrl } : prev);
-                await shareQrImageToUpiApp(dataUrl, workerName, amountNum);
-            } catch (err) {
-                console.error("QR Share error:", err);
-            }
-
-            setTimeout(() => {
-                setIsUpiRedirecting(false);
-                setIsWaitingForUpi(true);
-            }, 3500);
-            return;
+            await shareQrImageToUpiApp(dataUrl, workerName, amountNum);
+            setIsWaitingForUpi(true);
+        } catch (err) {
+            console.error("QR Share error:", err);
+            setIsWaitingForUpi(true);
         }
+    };
+    
+    
+    // Unified Handle Save (Add & Edit)
+    const handleSave = async (e) => {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        if (!formData.amount) return toast.error("Amount required!");
+        if (editId && !formData.reason) return toast.error("Reason for Edit is required!");
+
+        const amountNum = Number(formData.amount);
 
         try {
             setIsSaving(true);
@@ -312,7 +310,7 @@ const WorkerLedger = () => {
            
                         {/* 6. UNIFIED ADD/EDIT MODAL (True Bottom Sheet) */}
                        <TransactionModal
-                            isOpen={showModal || isWaitingForUpi}
+                            isOpen={showModal}
                             onClose={() => { setShowModal(false); setIsWaitingForUpi(false); setPendingUpiData(null); }}
                             onSubmit={handleSave}
                             type="Advance"
@@ -348,7 +346,53 @@ const WorkerLedger = () => {
                             isWaitingForUpi={isWaitingForUpi}
                             pendingUpiData={pendingUpiData}
                             onCancelUpi={() => { setIsWaitingForUpi(false); setPendingUpiData(null); }}
+                            onPayOnline={handlePayOnline}
                         />
+
+                        {!isUpiRedirecting && isWaitingForUpi && pendingUpiData && (
+                        <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in select-none">
+                            <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl p-6 relative animate-pop-in text-center space-y-4">
+                                <div className="w-12 h-12 bg-blue-50 text-[#1048A4] rounded-full flex items-center justify-center mx-auto text-xl font-bold shadow-inner">
+                                    ₹
+                                </div>
+                                <div>
+                                    <h2 className="text-base font-extrabold text-gray-900 tracking-tight">Payment Confirmation</h2>
+                                    <p className="text-sm font-medium text-gray-600 mt-2 leading-relaxed">
+                                        Please confirm if the transfer of <span className="font-bold text-[#C0392B]">₹{pendingUpiData.amount}</span> to <span className="font-bold text-[#1048A4]">{pendingUpiData.workerName}</span> was completed successfully via GPay.
+                                    </p>
+                                </div>
+                                {pendingUpiData.qrDataUrl && (
+                                    <div className="flex flex-col items-center bg-gray-50 p-3 rounded-xl border border-gray-200">
+                                        <img src={pendingUpiData.qrDataUrl} alt="Payment QR" className="w-36 h-36 rounded-lg shadow-sm" />
+                                        <button
+                                            type="button"
+                                            onClick={() => shareQrImageToUpiApp(pendingUpiData.qrDataUrl, pendingUpiData.workerName, pendingUpiData.amount)}
+                                            className="mt-2 bg-[#1A73E8] text-white px-4 py-2 rounded-lg text-xs font-bold shadow active:scale-95 transition"
+                                        >
+                                            Open QR in GPay / PhonePe Scanner
+                                        </button>
+                                    </div>
+                                )}
+                                <div className="flex gap-3 pt-2">
+                                    <button 
+                                        type="button"
+                                        onClick={() => { setIsWaitingForUpi(false); setPendingUpiData(null); }}
+                                        className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-bold py-3.5 rounded-xl transition active:scale-[0.98]"
+                                    >
+                                        No (Cancel)
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        disabled={isSaving}
+                                        onClick={handleSave}
+                                        className="flex-1 bg-[#0E793C] hover:bg-[#0A5C2D] text-white text-sm font-bold py-3.5 rounded-xl transition active:scale-[0.98] shadow-lg"
+                                    >
+                                        {isSaving ? "RECORDING..." : "Yes (Complete & Save)"}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                         {/* 🔒 3.5-SECOND LOCK SCREEN OVERLAY */}
                         {isUpiRedirecting && (

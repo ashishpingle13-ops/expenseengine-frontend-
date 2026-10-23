@@ -85,15 +85,11 @@ export const generateDynamicUpiQrDataUrl = async ({ upiId, workerName, amount, n
   return { dataUrl, upiString, cleanPa };
 };
 
-// 3. Shares the generated QR image directly to Google Pay / PhonePe on Android
+// 3. Immediately shares the generated QR image to Google Pay / PhonePe
 export const shareQrImageToUpiApp = async (dataUrl, workerName, amount) => {
-  // Copy amount to clipboard as an extra safety net
-  try {
-    await navigator.clipboard.writeText(String(amount));
-  } catch {}
 
   if (Capacitor.isNativePlatform()) {
-    // Native Android APK: Write temp PNG to cache and open native Android Share Sheet
+    // Native Android APK: Write temp PNG to cache and pop open Android Share Sheet immediately
     const base64Data = dataUrl.split(",")[1];
     const fileName = `upi_qr_${Date.now()}.png`;
 
@@ -105,20 +101,65 @@ export const shareQrImageToUpiApp = async (dataUrl, workerName, amount) => {
 
     await Share.share({
       title: `Pay ₹${amount} to ${workerName}`,
-      text: `Scan with Google Pay or PhonePe to pay ₹${amount} to ${workerName}`,
+      text: `Pay ₹${amount} to ${workerName}`,
       url: savedFile.uri,
-      dialogTitle: "Select Google Pay / PhonePe to Scan QR",
+      dialogTitle: "Select Google Pay or PhonePe to Scan QR",
     });
-  } else if (navigator.canShare) {
+  } else if (navigator.share) {
     // Mobile Chrome Web Fallback
     const res = await fetch(dataUrl);
     const blob = await res.blob();
-    const file = new File([blob], "payment_qr.png", { type: "image/png" });
-    if (navigator.canShare({ files: [file] })) {
+    const file = new File([blob], `pay_${workerName}_${amount}.png`, { type: "image/png" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({
         title: `Pay ₹${amount} to ${workerName}`,
         files: [file],
       });
     }
+  }
+};
+
+// 4. Universal PDF Export (Works on both Web and Native Android APK!)
+export const saveOrSharePdf = async (doc, fileName) => {
+  if (Capacitor.isNativePlatform()) {
+    const base64Pdf = doc.output("datauristring").split(",")[1];
+    const savedFile = await Filesystem.writeFile({
+      path: fileName,
+      data: base64Pdf,
+      directory: Directory.Cache,
+    });
+    await Share.share({
+      title: fileName,
+      url: savedFile.uri,
+      dialogTitle: "Save or Share PDF Report",
+    });
+  } else {
+    doc.save(fileName);
+  }
+};
+
+// 5. Universal Excel/CSV Export (Works on both Web and Native Android APK!)
+export const saveOrShareCsv = async (csvContent, fileName) => {
+  if (Capacitor.isNativePlatform()) {
+    const base64Csv = btoa(unescape(encodeURIComponent(csvContent)));
+    const savedFile = await Filesystem.writeFile({
+      path: fileName,
+      data: base64Csv,
+      directory: Directory.Cache,
+    });
+    await Share.share({
+      title: fileName,
+      url: savedFile.uri,
+      dialogTitle: "Save or Share Excel Report",
+    });
+  } else {
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 };
