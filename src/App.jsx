@@ -17,6 +17,7 @@ import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { Capacitor } from '@capacitor/core';
+import { EdgeToEdge } from '@capawesome/capacitor-android-edge-to-edge-support';
 
 
 
@@ -61,8 +62,7 @@ function DynamicStatusBar() {
 
       // 2. Update Native Android Status Bar via Capacitor
       try {
-        await StatusBar.setOverlaysWebView({ overlay: false });
-        await StatusBar.setBackgroundColor({ color: bgColor });
+        await EdgeToEdge.setStatusBarColor({ color: bgColor });
         await StatusBar.setStyle({ style: barStyle });
       } catch (err) {
         // Ignored on standard desktop web browsers
