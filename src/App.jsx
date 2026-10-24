@@ -13,6 +13,70 @@ import  Expenses  from "./pages/Expenses";
 import WorkerLedger from "./pages/WorkerLedger";
 import PickContact from "./pages/PickContact";
 import { SWRConfig } from 'swr';
+import { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+import { StatusBar, Style } from '@capacitor/status-bar';
+import { Capacitor } from '@capacitor/core';
+
+
+
+function DynamicStatusBar() {
+  const location = useLocation();
+
+  useEffect(() => {
+    const updateBarColor = async () => {
+      const path = location.pathname.toLowerCase();
+
+      let bgColor = '#1048A4'; // Default: Royal Blue (Cashbook, PickContact, AddWorker, WorkerLedger)
+      let barStyle = Style.Dark; // White status bar icons
+
+      if (path === '/' || path.includes('login')) {
+        bgColor = '#0A3D91'; // Login Page -> Deep Royal Blue
+        barStyle = Style.Dark;
+      } else if (
+        path.includes('home') ||
+        path.includes('dashboard') ||
+        path.includes('report') ||
+        path.includes('monthly') ||
+        path.includes('date')
+      ) {
+        bgColor = '#0E793C'; // Attendance / Dashboard / Report -> Forest Green
+        barStyle = Style.Dark;
+      } else if (path.includes('expense')) {
+        bgColor = '#9D0052'; // Site Expenses -> Maroon
+        barStyle = Style.Dark;
+      } else if (path.includes('profile')) {
+        bgColor = '#FFFFFF'; // Profile Page -> Pure White
+        barStyle = Style.Light; // Dark status bar icons
+      }
+
+      // 1. Update HTML meta theme-color for WebView / Chrome
+      let metaTheme = document.querySelector('meta[name="theme-color"]');
+      if (!metaTheme) {
+        metaTheme = document.createElement('meta');
+        metaTheme.name = 'theme-color';
+        document.head.appendChild(metaTheme);
+      }
+      metaTheme.setAttribute('content', bgColor);
+
+      // 2. Update Native Android Status Bar via Capacitor
+      try {
+        await StatusBar.setOverlaysWebView({ overlay: false });
+        await StatusBar.setBackgroundColor({ color: bgColor });
+        await StatusBar.setStyle({ style: barStyle });
+      } catch (err) {
+        // Ignored on standard desktop web browsers
+      }
+    };
+
+    updateBarColor();
+  }, [location.pathname]);
+
+  return null;
+}
+
+
+
 
 // This function syncs SWR cache to localStorage
 const localStorageProvider = () => {
@@ -28,7 +92,7 @@ export default function App() {
   return (
     <SWRConfig value={{ provider: localStorageProvider, revalidateOnFocus: false, dedupingInterval: 10000 }}>
     <BrowserRouter> 
-
+      <DynamicStatusBar />
     <Toaster 
   position="top-center" 
   reverseOrder={false} 
