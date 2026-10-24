@@ -7,7 +7,7 @@ import { getAuth } from "firebase/auth";
 // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyDEi0Bo7dVIeXooBMDjebarmE2U5gUkmzU",
-  authDomain: "expenseengine.firebaseapp.com",
+  authDomain: "expenseengine-frontend.vercel.app",
   projectId: "expenseengine",
   storageBucket: "expenseengine.firebasestorage.app",
   messagingSenderId: "534058615731",

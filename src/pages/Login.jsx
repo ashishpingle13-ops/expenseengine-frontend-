@@ -1,7 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
-import { GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from 'firebase/auth';
+import {
+  GoogleAuthProvider,
+  signInWithRedirect,
+  getRedirectResult,
+  onAuthStateChanged,
+} from 'firebase/auth';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 import {
@@ -44,22 +49,53 @@ export default function Login() {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const navigate = useNavigate();
 
-  // 1. "LIFETIME LOGIN" CHECK
+  // 1. HANDLE REDIRECT RESULT + "LIFETIME LOGIN" CHECK
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        try {
-          const token = await currentUser.getIdToken();
+    let isMounted = true;
+
+    const initAuth = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result?.user) {
+          const token = await result.user.getIdToken();
           localStorage.setItem("authToken", token);
-        } catch (error) {
-          console.error("Error refreshing token on automated login:", error);
+          try {
+            await api.post("/users/sync");
+          } catch (syncError) {
+            console.error("Error syncing user to database:", syncError);
+          }
+          toast.success("Welcome back! 🎉");
+          if (isMounted) navigate('/cashbook', { replace: true });
+          return;
         }
-        navigate('/cashbook', { replace: true });
-      } else {
-        setIsLoading(false);
+      } catch (error) {
+        console.error("Redirect login error:", error);
+        toast.error("Google sign-in failed. Please try again.");
       }
-    });
-    return () => unsubscribe();
+
+      const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+        if (currentUser) {
+          try {
+            const token = await currentUser.getIdToken();
+            localStorage.setItem("authToken", token);
+            await api.post("/users/sync").catch(() => {});
+          } catch (error) {
+            console.error("Error refreshing token on automated login:", error);
+          }
+          if (isMounted) navigate('/cashbook', { replace: true });
+        } else {
+          if (isMounted) setIsLoading(false);
+        }
+      });
+
+      return unsubscribe;
+    };
+
+    const unsubPromise = initAuth();
+    return () => {
+      isMounted = false;
+      unsubPromise.then((unsub) => unsub && unsub());
+    };
   }, [navigate]);
 
   // 2. GOOGLE LOGIN HANDLER
@@ -70,25 +106,10 @@ export default function Login() {
 
     try {
       setIsSigningIn(true);
-      const googleLogin = await signInWithPopup(auth, provider);
-
-      const token = await googleLogin.user.getIdToken();
-      localStorage.setItem("authToken", token);
-
-      try {
-        await api.post("/users/sync");
-      } catch (syncError) {
-        console.error("Error syncing user to database:", syncError);
-      }
-
-      toast.success("Welcome back! 🎉");
-      navigate("/cashbook", { replace: true });
+      await signInWithRedirect(auth, provider);
     } catch (error) {
       console.error("Error in handleGoogleLogin:", error);
-      if (error.code !== 'auth/popup-closed-by-user') {
-        toast.error("Google sign-in failed. Please try again.");
-      }
-    } finally {
+      toast.error("Google sign-in failed. Please try again.");
       setIsSigningIn(false);
     }
   };
@@ -96,7 +117,7 @@ export default function Login() {
   // 3. INITIAL SESSION RESTORE SPINNER
   if (isLoading) {
     return (
-      <div className="min-h-[100dvh] w-full bg-[#F9FAFB] flex flex-col justify-center items-center">
+      <div className="min-h-dvh w-full bg-[#F9FAFB] flex flex-col justify-center items-center">
         <div className="w-10 h-10 border-4 border-[#1048A4] border-t-transparent rounded-full animate-spin"></div>
         <p className="mt-4 text-gray-600 text-sm font-bold tracking-wide">Restoring session...</p>
       </div>
@@ -105,14 +126,11 @@ export default function Login() {
 
   // 4. NEW DESIGN UI (Full Mobile Screen Fit)
   return (
-    <main className="fixed inset-0 flex h-[100dvh] w-full flex-col justify-between overflow-hidden bg-[#0A3D91] bg-[linear-gradient(to_right,#ffffff0a_1px,transparent_1px),linear-gradient(to_bottom,#ffffff0a_1px,transparent_1px)] bg-[size:24px_24px]">
-      {/* BACKGROUND GLOWS */}
+    <main className="fixed inset-0 flex h-dvh w-full flex-col justify-between overflow-hidden bg-[#0A3D91] bg-[linear-gradient(to_right,#ffffff0a_1px,transparent_1px),linear-gradient(to_bottom,#ffffff0a_1px,transparent_1px)] bg-size[24px_24px]">
       <div className="pointer-events-none absolute -right-24 -top-20 h-72 w-72 rounded-full bg-blue-300/15 blur-3xl" />
       <div className="pointer-events-none absolute -left-24 bottom-32 h-64 w-64 rounded-full bg-[#FFD700]/10 blur-3xl" />
 
-      {/* TOP ROYAL BLUE HERO & PREVIEW WRAPPER */}
       <div className="relative z-10 flex flex-1 flex-col justify-evenly px-5 pt-4 pb-2 min-h-0">
-        {/* HEADER BAR */}
         <div className="flex items-center gap-3 shrink-0">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/10">
             <Wallet className="h-5 w-5 text-[#FFD700]" strokeWidth={2.2} />
@@ -131,7 +149,6 @@ export default function Login() {
           </div>
         </div>
 
-        {/* HERO HEADLINE */}
         <div className="shrink-0 my-1">
           <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-200">
             Business money, under control
@@ -144,7 +161,6 @@ export default function Login() {
           </div>
         </div>
 
-        {/* FLOATING CASHBOX PREVIEW CARD */}
         <section className="relative z-20 shrink-0 rounded-2xl border border-gray-100 bg-white p-3.5 shadow-[0_12px_32px_rgba(0,0,0,0.22)]">
           <div className="flex items-start justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2.5">
@@ -219,7 +235,6 @@ export default function Login() {
         </section>
       </div>
 
-      {/* BOTTOM LOGIN ACTION SHEET */}
       <section className="relative z-30 shrink-0 rounded-t-3xl border-t border-gray-100 bg-white px-6 pb-5 pt-3 shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
         <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-gray-200" />
         <div className="text-[19px] font-bold tracking-tight text-gray-900">Welcome Back</div>
